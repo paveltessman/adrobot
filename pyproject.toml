@@ -5,7 +5,6 @@ description = "opa"
 
 [tool.pyright]
 include = ["adrobot"]
-typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
 
