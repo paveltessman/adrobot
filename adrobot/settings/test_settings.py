@@ -11,6 +11,9 @@ from .settings import Settings
 def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ADROBOT_KEITARO_API_KEY", raising=False)
+    monkeypatch.setenv(
+        "ADROBOT_KEITARO_BASE_URL", "https://keitaro.example/admin_api/v1/"
+    )
 
 
 def test_loads_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,3 +40,18 @@ def test_requires_api_key() -> None:
         error["loc"] == ("ADROBOT_KEITARO_API_KEY",) and error["type"] == "missing"
         for error in exc_info.value.errors()
     )
+
+
+def test_requires_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ADROBOT_KEITARO_BASE_URL")
+    monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "test-key")
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+@pytest.mark.parametrize("url", ["relative/path", "ftp://example.com"])
+def test_rejects_invalid_base_url(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
+    monkeypatch.setenv("ADROBOT_KEITARO_BASE_URL", url)
+    monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "test-key")
+    with pytest.raises(ValidationError):
+        Settings()
