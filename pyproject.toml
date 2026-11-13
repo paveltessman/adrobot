@@ -1,0 +1,8 @@
+[project]
+name = "adrobot"
+version = "0.0.0"
+description = "opa"
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
