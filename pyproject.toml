@@ -10,6 +10,8 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["adrobot"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
 
 [build-system]

@@ -24,6 +24,7 @@ pydantic_core==2.50.4
 Pygments==2.21.0
 pyright==1.1.414
 pytest==9.2.0
+pytest-asyncio==1.5.0
 python-discovery==1.9.5
 python-dotenv==1.2.4
 PyYAML==6.0.3
