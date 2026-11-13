@@ -1,6 +1,8 @@
 import asyncio
 import socket
 from collections.abc import AsyncGenerator
+from collections.abc import Awaitable
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Annotated
 from unittest.mock import patch
@@ -8,10 +10,13 @@ from unittest.mock import patch
 import aiohttp
 import pytest
 import uvicorn
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
+from pydantic import HttpUrl
 
 from .dependencies import get_keitaro_service
 from .schemas import SuccessResponse
@@ -193,3 +198,124 @@ async def test_http_errors_and_headers(settings: Settings) -> None:
         assert response.status == 401
         assert (await response.json())["error"]["code"] == "UNAUTHORIZED"
         assert response.headers["www-authenticate"] == "Bearer"
+
+
+_CAMPAIGNS_PATH = "/api/v1/integrations/keitaro/campaigns"
+
+
+@asynccontextmanager
+async def campaigns_client(
+    settings: Settings,
+    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+) -> AsyncGenerator[aiohttp.ClientSession]:
+    upstream = web.Application()
+    upstream.router.add_get("/admin_api/v1/campaigns", handler)
+    async with TestServer(upstream) as server:
+        configured = settings.model_copy(
+            update={
+                "ADROBOT_KEITARO_BASE_URL": HttpUrl(
+                    str(server.make_url("/admin_api/v1/"))
+                )
+            }
+        )
+        async with http_client(create_app(configured)) as client:
+            yield client
+
+
+@pytest.mark.parametrize(
+    ("params", "limit", "offset", "count", "has_more"),
+    [
+        ({}, 100, 0, 0, False),
+        ({}, 100, 0, 100, False),
+        ({}, 100, 0, 101, True),
+        ({"limit": "2", "offset": "10"}, 2, 10, 1, False),
+        ({"limit": "2", "offset": "10"}, 2, 10, 2, False),
+        ({"limit": "2", "offset": "10"}, 2, 10, 3, True),
+        ({"limit": "1", "offset": "0"}, 1, 0, 2, True),
+    ],
+)
+async def test_campaigns_pagination(
+    settings: Settings,
+    params: dict[str, str],
+    limit: int,
+    offset: int,
+    count: int,
+    has_more: bool,
+) -> None:
+    calls: list[dict[str, str]] = []
+    campaigns = [
+        {"id": offset + index + 1, "name": f"Campaign {index}"}
+        for index in range(count)
+    ]
+
+    async def handler(request: web.Request) -> web.Response:
+        calls.append(dict(request.query))
+        assert request.headers["Api-Key"] == "test-key"
+        return web.json_response(campaigns)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_CAMPAIGNS_PATH, params=params)
+        assert response.status == 200
+        assert await response.json() == {
+            "data": {
+                "items": campaigns[:limit],
+                "limit": limit,
+                "offset": offset,
+                "has_more": has_more,
+            },
+            "error": None,
+        }
+    assert calls == [{"limit": str(limit + 1), "offset": str(offset)}]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"limit": "0"},
+        {"limit": "-1"},
+        {"limit": "101"},
+        {"limit": "1.5"},
+        {"limit": "invalid"},
+        {"offset": "-1"},
+        {"offset": "1.5"},
+        {"offset": "invalid"},
+    ],
+)
+async def test_campaigns_invalid_pagination(
+    settings: Settings, params: dict[str, str]
+) -> None:
+    calls: list[str] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        calls.append(request.path)
+        return web.json_response([])
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_CAMPAIGNS_PATH, params=params)
+        assert response.status == 422
+        assert await response.json() == {
+            "data": None,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+            },
+        }
+    assert not calls
+
+
+@pytest.mark.parametrize(
+    ("status", "body"), [(401, "secret upstream error"), (200, "invalid JSON")]
+)
+async def test_campaigns_upstream_failures(
+    settings: Settings, status: int, body: str
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.Response(status=status, text=body)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_CAMPAIGNS_PATH)
+        assert response.status == 502
+        assert await response.json() == {
+            "data": None,
+            "error": {"code": "UPSTREAM_ERROR", "message": "Upstream request failed"},
+        }
