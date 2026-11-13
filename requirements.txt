@@ -1,11 +1,24 @@
+-e git+https://github.com/paveltessman/adrobot.git@5a9a3b8a58dedd82dce8d1943766110d5717e4b6#egg=adrobot
+annotated-types==0.8.0
 cfgv==3.5.0
 distlib==0.4.4
 filelock==4.2.10
 identify==2.6.20
+iniconfig==2.3.1
 nodeenv==1.12.0
 packaging==26.3
 platformdirs==4.14.5
+pluggy==1.7.0
 pre_commit==4.7.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+pydantic_core==2.50.4
+Pygments==2.21.0
+pyright==1.1.414
+pytest==9.2.0
 python-discovery==1.9.5
+python-dotenv==1.2.4
 PyYAML==6.0.3
+typing-inspection==0.4.5
+typing_extensions==4.16.0
 virtualenv==21.15.6

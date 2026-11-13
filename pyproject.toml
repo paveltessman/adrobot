@@ -3,6 +3,16 @@ name = "adrobot"
 version = "0.0.0"
 description = "opa"
 
+[tool.pyright]
+include = ["adrobot"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["adrobot"]
+filterwarnings = ["error"]
+
 [build-system]
 requires = ["flit_core<4"]
 build-backend = "flit_core.buildapi"
