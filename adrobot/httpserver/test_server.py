@@ -386,6 +386,7 @@ async def test_campaign_details(
         assert await response.json() == {
             "data": {
                 **campaign,
+                "type": None,
                 "alias": None,
                 "state": None,
                 "notes": None,
@@ -393,6 +394,9 @@ async def test_campaign_details(
                 "streams": [
                     {
                         **stream,
+                        "landings": [],
+                        "collect_clicks": False,
+                        "filter_or": False,
                         "updated_at": None,
                         "offer_details": [] if empty or index == 0 else [offer],
                         "removed_offers": [],

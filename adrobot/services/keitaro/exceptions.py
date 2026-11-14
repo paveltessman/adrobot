@@ -16,3 +16,7 @@ class OfferNotFoundError(KeitaroApiError):
 
 class InvalidCampaignPush(AdRobotException):
     """The proposed campaign changes cannot be applied."""
+
+
+class InvalidCampaignCreation(AdRobotException):
+    """The proposed campaign cannot be created."""

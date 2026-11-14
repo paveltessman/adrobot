@@ -3,15 +3,21 @@ from asyncio import Lock
 from dataclasses import replace
 
 from .api_client import KeitaroApiClient
+from .create import CampaignCreator
+from .create_models import CampaignCreateRequest
+from .create_models import CampaignCreateResult
 from .exceptions import CampaignNotFoundError
 from .exceptions import OfferNotFoundError
 from .models import Campaign
 from .models import CampaignConfiguration
 from .models import CampaignDetails
+from .models import CampaignGroup
 from .models import CampaignStream
+from .models import Domain
 from .models import Offer
 from .models import RemovedOffer
 from .models import Stream
+from .models import TrafficSource
 from .push import CampaignPusher
 from .push_models import CampaignPushRequest
 from .push_models import CampaignPushResult
@@ -32,6 +38,23 @@ class KeitaroService:
         self._database = database
         self._instance = instance
         self._refresh_lock = Lock()
+
+    async def create_campaign(
+        self, proposed: CampaignCreateRequest
+    ) -> CampaignCreateResult:
+        async with self._refresh_lock:
+            return await CampaignCreator(
+                self._api_client, self._load_campaign_details
+            ).create(proposed)
+
+    async def get_domains(self) -> list[Domain]:
+        return await self._api_client.get_domains()
+
+    async def get_campaign_groups(self) -> list[CampaignGroup]:
+        return await self._api_client.get_campaign_groups()
+
+    async def get_traffic_sources(self) -> list[TrafficSource]:
+        return await self._api_client.get_traffic_sources()
 
     async def get_campaigns(self, *, limit: int, offset: int) -> list[Campaign]:
         return await self._api_client.get_campaigns(limit=limit, offset=offset)

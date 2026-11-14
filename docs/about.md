@@ -6,12 +6,12 @@ Keitaro is an ad tracker used to monitor advertising profitability. It directs i
 
 ## Campaign creator
 
-The creator accepts a campaign name, a country geo-code, and a Keitaro offer ID. It creates a campaign with two streams:
+The creator accepts a campaign name, one or more country geo-codes, and a Keitaro offer ID. It creates a campaign with two streams:
 
-- The first stream captures traffic from the specified country and redirects it to Google.
+- The first stream captures traffic from any of the specified countries and redirects it to Google.
 - The second stream redirects traffic to the selected offer.
 
-The campaign must also have a domain, group, and traffic source configured. These resources are available through the Keitaro API.
+Domain, group, and traffic source are optional. Users can leave each unset or select an existing resource available through the Keitaro API.
 
 ## Campaign editor
 

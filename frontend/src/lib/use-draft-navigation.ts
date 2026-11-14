@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const message = "Discard pending offer changes and leave this page?";
+const defaultMessage = "Discard pending offer changes and leave this page?";
 
 // The project's TypeScript DOM definitions predate the Navigation API.
 interface HistoryNavigateEvent extends Event {
@@ -10,7 +10,10 @@ interface HistoryNavigateEvent extends Event {
   destination: { url: string; sameDocument: boolean };
 }
 
-export function useDraftNavigation(dirty: boolean): () => boolean {
+export function useDraftNavigation(
+  dirty: boolean,
+  message = defaultMessage,
+): () => boolean {
   useEffect(() => {
     if (!dirty) return;
     function beforeUnload(event: BeforeUnloadEvent) {
@@ -41,7 +44,7 @@ export function useDraftNavigation(dirty: boolean): () => boolean {
       window.removeEventListener("beforeunload", beforeUnload);
       navigation?.removeEventListener("navigate", navigate);
     };
-  }, [dirty]);
+  }, [dirty, message]);
 
   // Next.js links use onNavigate, since pushState is not cancellable.
   return () => !dirty || window.confirm(message);

@@ -18,6 +18,10 @@ if (
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
+      ...["domains", "campaign-groups", "traffic-sources"].map((resource) => ({
+        source: `/api/v1/integrations/keitaro/${resource}`,
+        destination: `${backendOrigin.origin}/api/v1/integrations/keitaro/${resource}`,
+      })),
       {
         source: "/api/v1/integrations/keitaro/campaigns/:id/push",
         destination: `${backendOrigin.origin}/api/v1/integrations/keitaro/campaigns/:id/push`,

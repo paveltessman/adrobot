@@ -12,14 +12,14 @@ The main page (`/`) displays the list of campaigns.
 
 ## Create campaign
 
-The form collects the fields required by the campaign creator:
+The form collects the following campaign settings:
 
 - Campaign name.
-- Country geo-code.
+- One or more country geo-codes, entered with commas or spaces. Normalize codes to uppercase and remove duplicates.
 - Initial offer, selected by searching existing Keitaro offers by name or ID.
-- Domain, group, and traffic source, selected from resources available in Keitaro.
+- Optional domain, group, and traffic source, selected from resources available in Keitaro. Each selector includes **None**; an empty resource list does not block creation.
 
-Every new campaign has two fixed streams: the country-filtered stream that redirects to Google, and the stream that redirects to the selected offer. The UI does not provide stream creation controls.
+Every new campaign has two fixed streams: the first redirects traffic from any selected country to Google, and the second redirects all remaining traffic to the selected offer. The UI does not provide stream creation controls.
 
 Before submission, show a preview of the campaign and these two streams. **Push** creates the campaign in Keitaro and opens its details page after success. **Cancel** discards the draft and returns to the campaign list. No campaign is created before Push.
 

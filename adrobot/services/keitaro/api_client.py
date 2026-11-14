@@ -2,13 +2,22 @@
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
+from .create_models import CampaignCreateRequest
+from .create_models import CreatedIdentity
+from .create_models import CreationResource
 from .exceptions import KeitaroApiError
 from .models import Campaign
 from .models import CampaignConfiguration
+from .models import CampaignGroup
+from .models import CreationOption
+from .models import Domain
 from .models import Offer
 from .models import Stream
+from .models import TrafficSource
 from .push_models import ProposedOffer
 from adrobot.services.network.http import AsyncHttpRequester
+from adrobot.services.network.http.types import JsonValue
+from adrobot.services.network.http.types import QueryParams
 
 _CAMPAIGNS = TypeAdapter(list[Campaign])
 
@@ -24,6 +33,97 @@ def create_keitaro_http_requester(base_url: str, api_key: str) -> AsyncHttpReque
 class KeitaroApiClient:
     def __init__(self, requester: AsyncHttpRequester) -> None:
         self._requester = requester
+
+    async def create_campaign(self, proposed: CampaignCreateRequest, alias: str) -> int:
+        payload: dict[str, JsonValue] = {
+            "name": proposed.name,
+            "alias": alias,
+            "type": "position",
+            "state": "active",
+        }
+        selected: dict[str, JsonValue] = {
+            "domain_id": proposed.domain_id,
+            "group_id": (
+                str(proposed.group_id) if proposed.group_id is not None else None
+            ),
+            "traffic_source_id": proposed.traffic_source_id,
+        }
+        payload.update(
+            {key: value for key, value in selected.items() if value is not None}
+        )
+        response = await self._requester.post(
+            "campaigns", json_data=payload, params=None, headers=None
+        )
+        try:
+            return CreatedIdentity.model_validate_json(response.body).id
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid created campaign response") from exc
+
+    async def create_stream(
+        self, campaign_id: int, payload: dict[str, JsonValue]
+    ) -> None:
+        if campaign_id < 1 or payload.get("campaign_id") != campaign_id:
+            raise ValueError("Stream campaign identity mismatch")
+        response = await self._requester.post(
+            "streams", json_data=payload, params=None, headers=None
+        )
+        try:
+            stream = Stream.model_validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid created stream response") from exc
+        if stream.id < 1 or stream.campaign_id != campaign_id:
+            raise KeitaroApiError("Created stream identity mismatch")
+
+    async def get_domain(self, domain_id: int) -> CreationResource:
+        return await self._get_creation_resource("domains", domain_id)
+
+    async def get_traffic_source(self, source_id: int) -> CreationResource:
+        return await self._get_creation_resource("traffic_sources", source_id)
+
+    async def _get_creation_resource(
+        self, path: str, resource_id: int
+    ) -> CreationResource:
+        if resource_id < 1:
+            raise ValueError("resource_id must be positive")
+        response = await self._requester.get(
+            f"{path}/{resource_id}", params=None, headers=None
+        )
+        try:
+            resource = CreationResource.model_validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid creation resource response") from exc
+        if resource.id != resource_id:
+            raise KeitaroApiError("Creation resource identity mismatch")
+        return resource
+
+    async def get_domains(self) -> list[Domain]:
+        return await self._get_creation_options("domains", TypeAdapter(list[Domain]))
+
+    async def get_campaign_groups(self) -> list[CampaignGroup]:
+        return await self._get_creation_options(
+            "groups", TypeAdapter(list[CampaignGroup]), params={"type": "campaigns"}
+        )
+
+    async def get_traffic_sources(self) -> list[TrafficSource]:
+        return await self._get_creation_options(
+            "traffic_sources", TypeAdapter(list[TrafficSource])
+        )
+
+    async def _get_creation_options[T: CreationOption](
+        self,
+        path: str,
+        adapter: TypeAdapter[list[T]],
+        *,
+        params: QueryParams | None = None,
+    ) -> list[T]:
+        response = await self._requester.get(path, params=params, headers=None)
+        try:
+            options = adapter.validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError(f"GET {path}: Invalid selector response") from exc
+        if len({option.id for option in options}) != len(options):
+            raise KeitaroApiError(f"GET {path}: Duplicate selector identity")
+        return options
 
     async def update_stream_offers(
         self, stream_id: int, offers: list[ProposedOffer]

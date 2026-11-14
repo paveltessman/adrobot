@@ -43,8 +43,8 @@ test("shows loading, then campaign names and IDs with a details link", async ({
   ).toBeVisible();
   await expect(page.getByText("Keitaro ID: 42")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Create campaign" }),
-  ).toBeDisabled();
+    page.getByRole("link", { name: "Create campaign" }),
+  ).toHaveAttribute("href", "/campaigns/new");
   await expect(
     page.getByRole("link", { name: "Open details for Summer campaign" }),
   ).toHaveAttribute("href", "/campaigns/42");
@@ -70,9 +70,9 @@ test("shows an empty state with the creation action", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "No campaigns yet" }),
   ).toBeVisible();
-  const buttons = page.getByRole("button", { name: "Create campaign" });
+  const buttons = page.getByRole("link", { name: "Create campaign" });
   await expect(buttons).toHaveCount(2);
-  await expect(buttons.nth(1)).toBeDisabled();
+  await expect(buttons.nth(1)).toHaveAttribute("href", "/campaigns/new");
 });
 
 test("retries a failed request", async ({ page }) => {

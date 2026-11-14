@@ -111,6 +111,7 @@ async def test_details_preserve_configuration_and_empty_streams(
         "id": 7,
         "name": "Campaign",
         "alias": "example",
+        "type": None,
         "state": "active",
         "group_id": 3,
         "traffic_source_id": 4,
