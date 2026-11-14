@@ -14,6 +14,7 @@ const stream = {
   filters: [],
   offers: [],
   offer_details: [],
+  removed_offers: [],
 };
 const campaign = {
   id: 7,
@@ -127,6 +128,91 @@ test("shows loading and a campaign without streams", async ({ page }) => {
   await expect(page.getByText("Loading campaign…")).toBeVisible();
   release();
   await expect(page.getByText("No streams in this campaign.")).toBeVisible();
+});
+
+test("toggles removed offers by stream and reloads history without writing", async ({
+  page,
+}) => {
+  const methods: string[] = [];
+  const data = {
+    ...campaign,
+    streams: campaign.streams.map((item) => ({
+      ...item,
+      removed_offers:
+        item.id === 1
+          ? []
+          : [
+              {
+                id: 10,
+                name:
+                  item.id === 2
+                    ? "Former summer offer"
+                    : "Former empty-stream offer",
+                last_known_state: item.id === 2 ? "active" : "deleted",
+              },
+            ],
+    })),
+  };
+  await page.route(api, (route) => {
+    methods.push(route.request().method());
+    return route.fulfill({ json: { data, error: null } });
+  });
+  await page.goto("/campaigns/7");
+  const toggle = page.getByRole("checkbox", { name: "Show removed" });
+  const offers = page.getByRole("region", { name: "Offers", exact: true });
+  const empty = page.getByRole("region", { name: "Empty offers", exact: true });
+  await expect(toggle).not.toBeChecked();
+  await expect(
+    page.getByText("Former summer offer", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    empty.getByText("No offers attached to this stream."),
+  ).toBeVisible();
+  await toggle.check();
+  await expect(
+    offers.getByText("Former summer offer", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    empty.getByText("Former empty-stream offer", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    empty.getByText("No offers attached to this stream."),
+  ).toHaveCount(0);
+  await expect(
+    offers.getByText("Former empty-stream offer", { exact: true }),
+  ).toHaveCount(0);
+  await expect(offers.getByText("Offer ID: 10 · Removed")).toBeVisible();
+  await expect(
+    empty.getByText(
+      "Last known offer status: deleted. Current availability has not been checked.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No traffic allocated", { exact: true }),
+  ).toHaveCount(2);
+  await expect(offers.getByText("Traffic share: 100%")).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Google", exact: true })
+      .getByText("https://google.com"),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
+  await toggle.uncheck();
+  await expect(page.getByText("Offer ID: 10 · Removed")).toHaveCount(0);
+  await expect(empty).toBeVisible();
+  await toggle.check();
+  await page.reload();
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(
+    offers.getByText("Former summer offer", { exact: true }),
+  ).toBeVisible();
+  expect(methods).toEqual(["GET", "GET"]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 for (const malformed of [false, true]) {

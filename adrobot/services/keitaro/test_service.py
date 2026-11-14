@@ -11,6 +11,7 @@ from .exceptions import KeitaroApiError
 from .models import Campaign
 from .models import CampaignConfiguration
 from .models import Offer
+from .models import RemovedOffer
 from .models import Stream
 from .models import StreamOffer
 from .service import KeitaroService
@@ -119,7 +120,13 @@ async def test_details_preserve_configuration_and_empty_streams(
     assert [item.model_dump(by_alias=True) for item in result.streams] == (
         []
         if empty
-        else [{**stream(1, []).model_dump(by_alias=True), "offer_details": []}]
+        else [
+            {
+                **stream(1, []).model_dump(by_alias=True),
+                "offer_details": [],
+                "removed_offers": [],
+            }
+        ]
     )
     case.configuration.assert_awaited_once_with(7)
     case.streams.assert_awaited_once_with(7)
@@ -239,11 +246,22 @@ async def test_refresh_tracks_removal_renaming_and_reattachment(
     case.offer.return_value = Offer(id=9, name="Renamed", state="disabled")
     result = await case.service.get_campaign_details(7)
     assert result.streams[0].offer_details == []
+    assert result.streams[0].removed_offers == [
+        RemovedOffer(id=9, name="Offer", last_known_state="active")
+    ]
+    assert result.streams[1].removed_offers == []
     assert await history(case, 2) == [Membership(9, "Offer", "active", False)]
     assert await history(case, 3) == [Membership(9, "Renamed", "disabled", True)]
 
     case.streams.return_value = [stream(2, [membership]), stream(3, [])]
-    await case.service.get_campaign_details(7)
+    result = await case.service.get_campaign_details(7)
+    assert result.streams[0].removed_offers == []
+    assert result.streams[0].offer_details == [
+        Offer(id=9, name="Renamed", state="disabled")
+    ]
+    assert result.streams[1].removed_offers == [
+        RemovedOffer(id=9, name="Renamed", last_known_state="disabled")
+    ]
     assert await history(case, 2) == [Membership(9, "Renamed", "disabled", True)]
     assert await history(case, 3) == [Membership(9, "Renamed", "disabled", False)]
 
@@ -268,6 +286,48 @@ async def test_later_offer_failure_does_not_persist_partial_observations(
         assert await history(case, stream_id) == [
             Membership(9, "Offer", "active", True)
         ]
+
+    case.offer.side_effect = None
+    case.streams.return_value = [stream(2, [original]), stream(3, [original])]
+    result = await case.service.get_campaign_details(7)
+    assert all(not item.removed_offers for item in result.streams)
+
+
+async def test_removed_history_is_scoped_and_retained_across_refreshes(
+    case: ServiceCase,
+) -> None:
+    instance = "https://example.com/admin_api/v1/"
+    async with case.database.transaction() as session:
+        repository = MembershipRepository(session)
+        for scope, membership in [
+            (MembershipScope(instance, 7, 2), Membership(9, "Old", "active", False)),
+            (MembershipScope(instance, 7, 2), Membership(10, "Gone", "deleted", True)),
+            (
+                MembershipScope(instance, 8, 2),
+                Membership(11, "Other campaign", "active", False),
+            ),
+            (
+                MembershipScope("other", 7, 2),
+                Membership(12, "Other tracker", "active", False),
+            ),
+            (
+                MembershipScope(instance, 7, 3),
+                Membership(13, "Other stream", "active", False),
+            ),
+        ]:
+            await repository.save(scope, membership)
+    case.streams.return_value = [stream(2, []), stream(4, [])]
+    expected = [
+        RemovedOffer(id=9, name="Old", last_known_state="active"),
+        RemovedOffer(id=10, name="Gone", last_known_state="deleted"),
+    ]
+    for _ in range(2):
+        result = await case.service.get_campaign_details(7)
+        assert result.streams[0].removed_offers == expected
+        assert result.streams[0].offer_details == []
+        assert result.streams[0].offers == []
+        assert result.streams[1].removed_offers == []
+    case.offer.assert_not_awaited()
 
 
 async def test_history_transaction_rolls_back_all_streams_on_storage_failure(

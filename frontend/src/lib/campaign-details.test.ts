@@ -29,10 +29,43 @@ const campaign = {
       filters: [],
       offers: [{ offer_id: 9, share: 100, state: "active" }],
       offer_details: [{ id: 9, name: "Offer", state: "active" }],
+      removed_offers: [
+        { id: 10, name: "Old offer", last_known_state: "active" },
+      ],
     },
   ],
 };
 afterEach(() => mock.restoreAll());
+
+for (const action_payload of [[], null]) {
+  test(`loads ${JSON.stringify(action_payload)} action payload with three offers`, async () => {
+    const offers = [9, 10, 11].map((id) => ({
+      id,
+      name: `Offer ${id}`,
+      state: "active",
+    }));
+    const data = {
+      ...campaign,
+      streams: [
+        {
+          ...campaign.streams[0],
+          action_payload,
+          offers: offers.map(({ id }) => ({
+            offer_id: id,
+            share: 100,
+            state: "active",
+          })),
+          offer_details: offers,
+          removed_offers: [],
+        },
+      ],
+    };
+    mock.method(globalThis, "fetch", async () =>
+      Response.json({ data, error: null }),
+    );
+    assert.deepEqual(await getCampaignDetails(7), data);
+  });
+}
 
 test("loads full details without caching and forwards cancellation", async () => {
   const fetchMock = mock.method(globalThis, "fetch", async () =>
@@ -77,6 +110,22 @@ for (const data of [
   { ...campaign, streams: [{ ...campaign.streams[0], campaign_id: 8 }] },
   { ...campaign, streams: [{ ...campaign.streams[0], offers: null }] },
   { ...campaign, streams: [{ ...campaign.streams[0], offer_details: [] }] },
+  ...[
+    undefined,
+    null,
+    {},
+    [{ id: 0, name: "Old", last_known_state: "active" }],
+    [{ id: 10, name: 1, last_known_state: "active" }],
+    [{ id: 10, name: "Old", last_known_state: null }],
+    [{ id: 9, name: "Attached", last_known_state: "active" }],
+    [
+      campaign.streams[0].removed_offers[0],
+      campaign.streams[0].removed_offers[0],
+    ],
+  ].map((removed_offers) => ({
+    ...campaign,
+    streams: [{ ...campaign.streams[0], removed_offers }],
+  })),
   {
     ...campaign,
     streams: [

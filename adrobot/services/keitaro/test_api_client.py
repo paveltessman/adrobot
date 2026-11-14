@@ -161,6 +161,30 @@ async def test_details_accept_campaign_without_streams() -> None:
             assert await KeitaroApiClient(requester).get_streams(7) == []
 
 
+async def test_new_campaign_stream_with_null_action_payload() -> None:
+    body = (
+        '[{"id":1301207,"type":"regular","name":"Flow 1",'
+        '"campaign_id":210022,"position":1,"action_options":null,'
+        '"comments":"","state":"active","created_at":"2026-11-14 10:47:52",'
+        '"action_type":"http","action_payload":null,"schema":"landings",'
+        '"collect_clicks":true,"filter_or":false,"weight":100,'
+        '"offer_selection":"before_click","filters":[],"triggers":[], '
+        '"landings":[],"offers":[]}]'
+    )
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.path.endswith("/campaigns/210022/streams")
+        return web.Response(text=body, content_type="application/json")
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            streams = await KeitaroApiClient(requester).get_streams(210022)
+    assert len(streams) == 1
+    assert streams[0].id == 1301207
+    assert streams[0].action_payload is None
+    assert streams[0].offers == []
+
+
 async def test_details_reject_invalid_ids_before_requesting() -> None:
     async with AsyncHttpRequester("https://example.com/admin_api/v1/") as requester:
         client = KeitaroApiClient(requester)

@@ -9,6 +9,7 @@ from .models import CampaignConfiguration
 from .models import CampaignDetails
 from .models import CampaignStream
 from .models import Offer
+from .models import RemovedOffer
 from .models import Stream
 from adrobot.services.network.http import HttpStatusError
 from adrobot.storage.database import Database
@@ -46,6 +47,7 @@ class KeitaroService:
                 CampaignStream(
                     **stream.model_dump(by_alias=True),
                     offer_details=[offers[item.offer_id] for item in stream.offers],
+                    removed_offers=[],
                 )
                 for stream in streams
             ],
@@ -59,7 +61,17 @@ class KeitaroService:
             for stream in details.streams:
                 scope = MembershipScope(self._instance, details.id, stream.id)
                 current_ids = {item.offer_id for item in stream.offers}
-                for previous in await repository.list(scope):
+                history = await repository.list(scope)
+                stream.removed_offers = [
+                    RemovedOffer(
+                        id=previous.offer_id,
+                        name=previous.name,
+                        last_known_state=previous.state,
+                    )
+                    for previous in history
+                    if previous.offer_id not in current_ids
+                ]
+                for previous in history:
                     if previous.attached and previous.offer_id not in current_ids:
                         await repository.save(scope, replace(previous, attached=False))
                 for offer in stream.offer_details:
