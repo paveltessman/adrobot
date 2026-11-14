@@ -24,6 +24,18 @@ class KeitaroApiClient:
     def __init__(self, requester: AsyncHttpRequester) -> None:
         self._requester = requester
 
+    async def get_offers(self) -> list[Offer]:
+        response = await self._requester.get("offers", params=None, headers=None)
+        try:
+            offers = TypeAdapter(list[Offer]).validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("GET offers: Invalid offers response") from exc
+        if any(offer.id < 1 for offer in offers) or len(
+            {offer.id for offer in offers}
+        ) != len(offers):
+            raise KeitaroApiError("GET offers: Invalid offer identities")
+        return offers
+
     async def get_campaigns(
         self,
         *,

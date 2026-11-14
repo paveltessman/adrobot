@@ -532,3 +532,109 @@ async def test_campaign_details_failures_are_not_partial(
                 ),
             },
         }
+
+
+_OFFERS_PATH = "/api/v1/integrations/keitaro/offers"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_ids"),
+    [
+        ("", [9, 19, 20]),
+        ("  SuMmEr  ", [9, 19]),
+        ("9", [9]),
+        ("20", [20]),
+        ("missing", []),
+        ("STRASSE", [20]),
+    ],
+)
+async def test_offer_search(
+    settings: Settings, query: str, expected_ids: list[int]
+) -> None:
+    offers = [
+        {"id": 9, "name": "Summer", "state": "active"},
+        {"id": 19, "name": "Summer two", "state": "disabled"},
+        {"id": 20, "name": "Straße", "state": "active"},
+    ]
+    calls: list[str] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.method == "GET"
+        assert request.headers["Api-Key"] == "test-key"
+        assert not request.query
+        calls.append(request.path)
+        return web.json_response(offers)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_OFFERS_PATH, params={"q": query})
+        assert response.status == 200
+        assert await response.json() == {
+            "data": [offer for offer in offers if offer["id"] in expected_ids],
+            "error": None,
+        }
+    assert calls == ["/admin_api/v1/offers"]
+
+
+async def test_offer_search_empty_catalog(settings: Settings) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.json_response([])
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_OFFERS_PATH)
+        assert response.status == 200
+        assert await response.json() == {"data": [], "error": None}
+
+
+async def test_offer_lookup(settings: Settings) -> None:
+    offer = {"id": 9, "name": "Offer", "state": "disabled"}
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.method == "GET"
+        assert request.path == "/admin_api/v1/offers/9"
+        assert not request.query
+        return web.json_response(offer)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_OFFERS_PATH}/9")
+        assert response.status == 200
+        assert await response.json() == {"data": offer, "error": None}
+
+
+@pytest.mark.parametrize("identifier", ["0", "-1", "abc"])
+async def test_offer_lookup_invalid_id(settings: Settings, identifier: str) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        pytest.fail("Invalid IDs must not reach Keitaro")
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_OFFERS_PATH}/{identifier}")
+        assert response.status == 422
+        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize("lookup", [False, True])
+@pytest.mark.parametrize(
+    ("upstream_status", "body"),
+    [
+        (404, "private upstream error"),
+        (403, "private upstream error"),
+        (200, "invalid JSON"),
+        (200, '{"id":99,"name":"Wrong","state":"active"}'),
+    ],
+)
+async def test_offer_failures(
+    settings: Settings, lookup: bool, upstream_status: int, body: str
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.Response(status=upstream_status, text=body)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(_OFFERS_PATH + ("/9" if lookup else ""))
+        missing = lookup and upstream_status == 404
+        assert response.status == (404 if missing else 502)
+        assert await response.json() == {
+            "data": None,
+            "error": {
+                "code": "NOT_FOUND" if missing else "UPSTREAM_ERROR",
+                "message": "Offer not found" if missing else "Upstream request failed",
+            },
+        }
