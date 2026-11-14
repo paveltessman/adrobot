@@ -128,3 +128,47 @@ async def test_invalid_arguments_are_rejected() -> None:
         for campaign_id in [0, -1]:
             with pytest.raises(ValueError, match="campaign_id"):
                 await client.get_campaign(campaign_id)
+
+
+@pytest.mark.parametrize("resource", ["configuration", "streams", "offer"])
+@pytest.mark.parametrize(
+    "body", ["null", "{}", '{"id":99,"name":"Wrong","state":"active"}']
+)
+async def test_details_reject_invalid_or_mismatched_resources(
+    resource: str, body: str
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.Response(text=body)
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            client = KeitaroApiClient(requester)
+            with pytest.raises(KeitaroApiError):
+                if resource == "configuration":
+                    await client.get_campaign_configuration(7)
+                elif resource == "streams":
+                    await client.get_streams(7)
+                else:
+                    await client.get_offer(7)
+
+
+async def test_details_accept_campaign_without_streams() -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.json_response([])
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            assert await KeitaroApiClient(requester).get_streams(7) == []
+
+
+async def test_details_reject_invalid_ids_before_requesting() -> None:
+    async with AsyncHttpRequester("https://example.com/admin_api/v1/") as requester:
+        client = KeitaroApiClient(requester)
+        for resource in [
+            client.get_campaign_configuration,
+            client.get_streams,
+            client.get_offer,
+        ]:
+            for identifier in [0, -1]:
+                with pytest.raises(ValueError):
+                    await resource(identifier)

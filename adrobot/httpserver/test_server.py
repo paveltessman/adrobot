@@ -1,3 +1,4 @@
+# pyright: strict
 import asyncio
 import socket
 from collections.abc import AsyncGenerator
@@ -209,7 +210,7 @@ async def campaigns_client(
     handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
 ) -> AsyncGenerator[aiohttp.ClientSession]:
     upstream = web.Application()
-    upstream.router.add_get("/admin_api/v1/campaigns", handler)
+    upstream.router.add_get("/admin_api/v1/{path:.*}", handler)
     async with TestServer(upstream) as server:
         configured = settings.model_copy(
             update={
@@ -318,4 +319,154 @@ async def test_campaigns_upstream_failures(
         assert await response.json() == {
             "data": None,
             "error": {"code": "UPSTREAM_ERROR", "message": "Upstream request failed"},
+        }
+
+
+@pytest.mark.parametrize("empty", [False, True])
+async def test_campaign_details(settings: Settings, empty: bool) -> None:
+    calls: list[str] = []
+    campaign = {
+        "id": 7,
+        "name": "Example",
+        "group_id": 3,
+        "traffic_source_id": 4,
+        "domain_id": 5,
+    }
+    membership = {"offer_id": 9, "share": 100, "state": "active"}
+    streams: list[dict[str, object]] = [
+        {
+            "id": stream_id,
+            "campaign_id": 7,
+            "name": name,
+            "type": "regular",
+            "state": "active",
+            "position": stream_id,
+            "schema": schema,
+            "action_type": "http",
+            "action_payload": destination,
+            "filters": [],
+            "offers": offers,
+        }
+        for stream_id, name, schema, destination, offers in [
+            (1, "Google", "redirect", "https://google.com", []),
+            (2, "Offers", "landings", "", [] if empty else [membership]),
+            (
+                3,
+                "Other offers",
+                "landings",
+                dict[str, object](),
+                [] if empty else [membership],
+            ),
+        ]
+    ]
+    offer = {"id": 9, "name": "Example offer", "state": "active"}
+
+    async def handler(request: web.Request) -> web.Response:
+        calls.append(request.path)
+        assert request.method == "GET"
+        assert request.headers["Api-Key"] == "test-key"
+        assert not request.query
+        if request.path.endswith("/streams"):
+            return web.json_response(streams)
+        if request.path.endswith("/offers/9"):
+            return web.json_response(offer)
+        assert request.path.endswith("/campaigns/7")
+        return web.json_response(campaign)
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_CAMPAIGNS_PATH}/7")
+        assert response.status == 200
+        assert await response.json() == {
+            "data": {
+                **campaign,
+                "alias": None,
+                "state": None,
+                "notes": None,
+                "updated_at": None,
+                "streams": [
+                    {
+                        **stream,
+                        "updated_at": None,
+                        "offer_details": [] if empty or index == 0 else [offer],
+                    }
+                    for index, stream in enumerate(streams)
+                ],
+            },
+            "error": None,
+        }
+    assert calls == [
+        "/admin_api/v1/campaigns/7",
+        "/admin_api/v1/campaigns/7/streams",
+    ] + ([] if empty else ["/admin_api/v1/offers/9"])
+
+
+@pytest.mark.parametrize("campaign_id", ["0", "-1", "invalid", "1.5"])
+async def test_campaign_details_invalid_id(
+    settings: Settings, campaign_id: str
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        pytest.fail("Invalid IDs must not reach Keitaro")
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_CAMPAIGNS_PATH}/{campaign_id}")
+        assert response.status == 422
+        await response.read()
+
+
+@pytest.mark.parametrize(
+    ("failure", "status", "expected"),
+    [
+        ("campaign", 404, 404),
+        ("campaign", 401, 502),
+        ("campaign", 200, 502),
+        ("streams", 200, 502),
+        ("streams", 404, 502),
+        ("offer", 404, 502),
+        ("offer", 200, 502),
+    ],
+)
+async def test_campaign_details_failures_are_not_partial(
+    settings: Settings, failure: str, status: int, expected: int
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        stage = (
+            "streams"
+            if request.path.endswith("/streams")
+            else "offer" if "/offers/" in request.path else "campaign"
+        )
+        if stage == failure:
+            return web.Response(status=status, text="secret invalid response")
+        if stage == "campaign":
+            return web.json_response({"id": 7, "name": "Example"})
+        return web.json_response(
+            [
+                {
+                    "id": 1,
+                    "campaign_id": 7,
+                    "name": "Offers",
+                    "type": "regular",
+                    "state": "active",
+                    "position": 1,
+                    "schema": "landings",
+                    "action_type": "http",
+                    "action_payload": "",
+                    "filters": [],
+                    "offers": [{"offer_id": 9, "share": 100, "state": "active"}],
+                }
+            ]
+        )
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_CAMPAIGNS_PATH}/7")
+        assert response.status == expected
+        assert await response.json() == {
+            "data": None,
+            "error": {
+                "code": "NOT_FOUND" if expected == 404 else "UPSTREAM_ERROR",
+                "message": (
+                    "Campaign not found"
+                    if expected == 404
+                    else "Upstream request failed"
+                ),
+            },
         }
