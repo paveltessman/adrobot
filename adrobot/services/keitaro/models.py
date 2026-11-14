@@ -65,3 +65,20 @@ class CampaignStream(Stream):
 
 class CampaignDetails(CampaignConfiguration):
     streams: list[CampaignStream]
+
+
+class CreationOption(_Base):
+    id: int = Field(gt=0)
+    name: str
+
+
+class Domain(CreationOption):
+    pass
+
+
+class CampaignGroup(CreationOption):
+    pass
+
+
+class TrafficSource(CreationOption):
+    pass

@@ -5,10 +5,15 @@ from pydantic import ValidationError
 from .exceptions import KeitaroApiError
 from .models import Campaign
 from .models import CampaignConfiguration
+from .models import CampaignGroup
+from .models import CreationOption
+from .models import Domain
 from .models import Offer
 from .models import Stream
+from .models import TrafficSource
 from .push_models import ProposedOffer
 from adrobot.services.network.http import AsyncHttpRequester
+from adrobot.services.network.http.types import QueryParams
 
 _CAMPAIGNS = TypeAdapter(list[Campaign])
 
@@ -24,6 +29,35 @@ def create_keitaro_http_requester(base_url: str, api_key: str) -> AsyncHttpReque
 class KeitaroApiClient:
     def __init__(self, requester: AsyncHttpRequester) -> None:
         self._requester = requester
+
+    async def get_domains(self) -> list[Domain]:
+        return await self._get_creation_options("domains", TypeAdapter(list[Domain]))
+
+    async def get_campaign_groups(self) -> list[CampaignGroup]:
+        return await self._get_creation_options(
+            "groups", TypeAdapter(list[CampaignGroup]), params={"type": "campaigns"}
+        )
+
+    async def get_traffic_sources(self) -> list[TrafficSource]:
+        return await self._get_creation_options(
+            "traffic_sources", TypeAdapter(list[TrafficSource])
+        )
+
+    async def _get_creation_options[T: CreationOption](
+        self,
+        path: str,
+        adapter: TypeAdapter[list[T]],
+        *,
+        params: QueryParams | None = None,
+    ) -> list[T]:
+        response = await self._requester.get(path, params=params, headers=None)
+        try:
+            options = adapter.validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError(f"GET {path}: Invalid selector response") from exc
+        if len({option.id for option in options}) != len(options):
+            raise KeitaroApiError(f"GET {path}: Duplicate selector identity")
+        return options
 
     async def update_stream_offers(
         self, stream_id: int, offers: list[ProposedOffer]
