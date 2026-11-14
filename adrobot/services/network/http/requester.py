@@ -128,6 +128,22 @@ class AsyncHttpRequester:
     ) -> HttpResponse:
         if URL(path).is_absolute() or path.startswith("//"):
             raise ValueError("path must be relative to base_url")
+        try:
+            return await self._request_with_retries(
+                method, path, params, headers, json_data
+            )
+        except NetworkError as exc:
+            exc.add_note(f"Upstream request: {method} {URL(path).path}")
+            raise
+
+    async def _request_with_retries(
+        self,
+        method: HttpMethod,
+        path: str,
+        params: QueryParams | None,
+        headers: HeadersDict | None,
+        json_data: JsonValue,
+    ) -> HttpResponse:
         for attempt in range(1, self._max_attempts + 1):
             response = await self._send(method, path, params, headers, json_data)
             if not self._should_retry(method, response.status_code, attempt):

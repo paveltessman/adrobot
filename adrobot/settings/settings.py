@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     ADROBOT_KEITARO_BASE_URL: HttpUrl
     ADROBOT_KEITARO_API_KEY: str
+    ADROBOT_DATABASE_URL: str = "sqlite+aiosqlite:///adrobot.sqlite3"
 
     def __init__(self) -> None:
         super().__init__()

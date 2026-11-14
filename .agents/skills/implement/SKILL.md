@@ -11,6 +11,8 @@ Plan first. After the user approves the plan, build one proposed commit at a tim
 
 Read the requested specification and other relevant documents in `docs/`. Use `docs/` as the source of project context. Read the affected code, nearby working examples, and their tests. Inspect `pyproject.toml`, `.pre-commit-config.yaml`, and any Pyright or pytest configuration before choosing commands.
 
+Do not edit `docs/` unless explicitly requested.
+
 Present a concise plan with:
 
 1. The behavior the change adds and the packages it touches.
@@ -48,7 +50,7 @@ Use the project's configured equivalents if these tools have dedicated commands 
 
 If a required tool is missing, set it up in `.venv` using the project's dependency conventions. If permissions or external dependencies block a check, report the command and blocker. Do not report unrun or failed checks as passing. A pytest run that collects no tests is not evidence that behavior works; explain when a documentation-only step has no applicable tests.
 
-Report the behavior changed, verification results, and decisions or limitations that need review. Suggest a commit message consistent with `git log`. Keep the report concise.
+Report the behavior changed, verification results, and decisions or limitations that need review. Suggest a commit message consistent with `git log`. Include the "co-athoored" footer that credits you. Keep the report concise.
 
 Stop for the user to review and commit. Do not start the next step or run `git commit` or `git push`.
 

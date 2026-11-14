@@ -91,4 +91,4 @@ Show a change summary and persistent **Push** and **Cancel** actions while there
 
 ## Implementation decisions to verify
 
-- Confirm Keitaro's supported weight precision and mapping to displayed percentages.
+- The public API defines offer shares as integer percentages; use whole-percentage precision. Verify share validation and normalization against the target tracker before implementing writes. See [storage.md](storage.md#keitaro-api-verification) for verified capabilities and remaining checks.

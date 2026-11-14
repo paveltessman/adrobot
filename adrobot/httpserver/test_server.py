@@ -66,6 +66,7 @@ async def http_client(app: FastAPI) -> AsyncGenerator[aiohttp.ClientSession]:
 
 @pytest.fixture
 def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+    monkeypatch.setenv("ADROBOT_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("ADROBOT_KEITARO_BASE_URL", "https://example.com/admin_api/v1/")
     monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "test-key")
     return Settings()
@@ -86,9 +87,11 @@ async def test_lifespan_builds_dependencies_and_closes_requester(
             session = requester.client
             service = get_keitaro_service(Request({"type": "http", "app": app}))
             assert isinstance(service, KeitaroService)
+            assert hasattr(app.state, "database")
             assert not session.closed
         assert session.closed
     assert not hasattr(app.state, "keitaro_service")
+    assert not hasattr(app.state, "database")
 
 
 async def test_startup_failure_closes_requester(settings: Settings) -> None:
@@ -109,6 +112,7 @@ async def test_startup_failure_closes_requester(settings: Settings) -> None:
                     pytest.fail("Startup should fail")
     with pytest.raises(RuntimeError, match="closed"):
         _ = requester.client
+    assert not hasattr(app.state, "database")
 
 
 async def test_success_and_validation_envelopes(settings: Settings) -> None:

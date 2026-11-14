@@ -43,7 +43,7 @@ class KeitaroApiClient:
         try:
             return _CAMPAIGNS.validate_json(response.body)
         except ValidationError as exc:
-            raise KeitaroApiError("Invalid campaigns response") from exc
+            raise KeitaroApiError("GET campaigns: Invalid campaigns response") from exc
 
     async def get_campaign(self, campaign_id: int) -> Campaign:
 
@@ -59,7 +59,9 @@ class KeitaroApiClient:
         try:
             return Campaign.model_validate_json(response.body)
         except ValidationError as exc:
-            raise KeitaroApiError("Invalid campaign response") from exc
+            raise KeitaroApiError(
+                f"GET campaigns/{campaign_id}: Invalid campaign response"
+            ) from exc
 
     async def get_campaign_configuration(
         self,
@@ -79,12 +81,16 @@ class KeitaroApiClient:
             campaign = CampaignConfiguration.model_validate_json(response.body)
 
             if campaign.id != campaign_id:
-                raise KeitaroApiError("Campaign identity mismatch")
+                raise KeitaroApiError(
+                    f"GET campaigns/{campaign_id}: Campaign identity mismatch"
+                )
 
             return campaign
 
         except ValidationError as exc:
-            raise KeitaroApiError("Invalid campaign response") from exc
+            raise KeitaroApiError(
+                f"GET campaigns/{campaign_id}: Invalid campaign response"
+            ) from exc
 
     async def get_streams(self, campaign_id: int) -> list[Stream]:
 
@@ -100,7 +106,9 @@ class KeitaroApiClient:
         try:
             streams = TypeAdapter(list[Stream]).validate_json(response.body)
         except ValidationError as exc:
-            raise KeitaroApiError("Invalid streams response") from exc
+            raise KeitaroApiError(
+                f"GET campaigns/{campaign_id}/streams: Invalid streams response"
+            ) from exc
 
         self._validate_streams(streams, campaign_id)
         return streams
@@ -109,10 +117,15 @@ class KeitaroApiClient:
     def _validate_streams(streams: list[Stream], campaign_id: int) -> None:
 
         if any(stream.campaign_id != campaign_id for stream in streams):
-            raise KeitaroApiError("Stream campaign identity mismatch")
+            raise KeitaroApiError(
+                f"GET campaigns/{campaign_id}/streams: "
+                "Stream campaign identity mismatch"
+            )
 
         if len({stream.id for stream in streams}) != len(streams):
-            raise KeitaroApiError("Duplicate stream identity")
+            raise KeitaroApiError(
+                f"GET campaigns/{campaign_id}/streams: Duplicate stream identity"
+            )
 
     async def get_offer(self, offer_id: int) -> Offer:
 
@@ -129,9 +142,11 @@ class KeitaroApiClient:
             offer = Offer.model_validate_json(response.body)
 
             if offer.id != offer_id:
-                raise KeitaroApiError("Offer identity mismatch")
+                raise KeitaroApiError(f"GET offers/{offer_id}: Offer identity mismatch")
 
             return offer
 
         except ValidationError as exc:
-            raise KeitaroApiError("Invalid offer response") from exc
+            raise KeitaroApiError(
+                f"GET offers/{offer_id}: Invalid offer response"
+            ) from exc

@@ -38,7 +38,7 @@ async def handle_validation_error(request: Request, exc: Exception) -> JSONRespo
 
 
 async def handle_upstream_error(request: Request, exc: Exception) -> JSONResponse:
-    Logger().error(f"Upstream failure: {type(exc).__name__} at {request.url.path}")
+    Logger().exception(f"Upstream failure at {request.method} {request.url.path}", exc)
     if isinstance(exc, ConnectionTimeoutError):
         return error_response(504, "UPSTREAM_TIMEOUT", "Upstream request timed out")
     return error_response(502, "UPSTREAM_ERROR", "Upstream request failed")

@@ -11,6 +11,7 @@ from .settings import Settings
 def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ADROBOT_KEITARO_API_KEY", raising=False)
+    monkeypatch.delenv("ADROBOT_DATABASE_URL", raising=False)
     monkeypatch.setenv(
         "ADROBOT_KEITARO_BASE_URL", "https://keitaro.example/admin_api/v1/"
     )
@@ -20,6 +21,13 @@ def test_loads_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "environment-key")
 
     assert Settings().ADROBOT_KEITARO_API_KEY == "environment-key"
+
+
+def test_database_url_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "test-key")
+    assert Settings().ADROBOT_DATABASE_URL == "sqlite+aiosqlite:///adrobot.sqlite3"
+    monkeypatch.setenv("ADROBOT_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    assert Settings().ADROBOT_DATABASE_URL == "sqlite+aiosqlite:///:memory:"
 
 
 def test_loads_dotenv_file(tmp_path: Path) -> None:
