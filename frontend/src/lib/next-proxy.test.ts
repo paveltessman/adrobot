@@ -6,7 +6,13 @@ test("offer search and lookup have backend proxy routes", async () => {
   assert.equal(typeof config.rewrites, "function");
   const rewrites = await config.rewrites!();
   assert.ok(Array.isArray(rewrites));
-  for (const path of ["offers", "offers/:id", "campaigns", "campaigns/:id"]) {
+  for (const path of [
+    "offers",
+    "offers/:id",
+    "campaigns",
+    "campaigns/:id",
+    "campaigns/:id/push",
+  ]) {
     const source = `/api/v1/integrations/keitaro/${path}`;
     const rewrite: { source: string; destination: string } | undefined =
       rewrites.find((rule) => rule.source === source);

@@ -107,7 +107,7 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
   );
 }
 
-function isDetails(
+export function isCampaignDetails(
   value: unknown,
   campaignId: number,
 ): value is CampaignDetails {
@@ -152,7 +152,11 @@ export async function getCampaignDetails(
   } catch {
     throw new Error("The campaign service returned an invalid response.");
   }
-  if (!record(body) || body.error !== null || !isDetails(body.data, campaignId))
+  if (
+    !record(body) ||
+    body.error !== null ||
+    !isCampaignDetails(body.data, campaignId)
+  )
     throw new Error("The campaign service returned an invalid response.");
   return body.data;
 }

@@ -594,8 +594,7 @@ test("previews allocation changes and cancels all streams without remote writes"
   ).toContainText("Add · Traffic: 0% → 100%");
   await expect(
     summary.getByRole("button", { name: "Push", exact: true }),
-  ).toBeDisabled();
-  await expect(summary).toContainText("Push is not available yet");
+  ).toBeEnabled();
   await summary.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(summary).toHaveCount(0);
   await expect(
