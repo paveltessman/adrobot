@@ -57,5 +57,11 @@ jobs:
         run: npm run format:check
       - name: Check TypeScript
         run: npm run typecheck
+      - name: Test frontend
+        run: npm test
       - name: Build frontend
         run: npm run build
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Test pages
+        run: npm run test:e2e
