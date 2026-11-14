@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StreamOfferEditor } from "@/components/stream-offer-editor";
 import { ArrowLeft, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -81,8 +82,10 @@ function StreamView({
         </details>
       )}
       <h4 className="mt-7 font-medium">Offers</h4>
-      {stream.offers.length === 0 &&
-      (!showRemoved || stream.removed_offers.length === 0) ? (
+      {stream.schema === "landings" ? (
+        <StreamOfferEditor stream={stream} showRemoved={showRemoved} />
+      ) : stream.offers.length === 0 &&
+        (!showRemoved || stream.removed_offers.length === 0) ? (
         <p className="mt-3 text-sm text-muted-foreground">
           No offers attached to this stream.
         </p>
@@ -218,8 +221,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                 Keitaro ID: {state.campaign.id}
               </p>
               <p className="mt-3 text-sm text-muted-foreground">
-                View campaign configuration and offers. Offer editing is coming
-                soon.
+                Stage offer changes locally. Changes are not saved yet;
+                reloading or leaving this page discards them.
               </p>
             </div>
             <section
