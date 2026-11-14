@@ -15,6 +15,7 @@ class Campaign(_Base):
 
 
 class CampaignConfiguration(Campaign):
+    type: str | None = None
     alias: str | None = None
     state: str | None = None
     domain_id: int | None = None
@@ -48,6 +49,11 @@ class Stream(_Base):
     routing_schema: str = Field(alias="schema")
     filters: list[dict[str, JsonValue]]
     offers: list[StreamOffer]
+    landings: list[dict[str, JsonValue]] = Field(
+        default_factory=list[dict[str, JsonValue]]
+    )
+    collect_clicks: bool = False
+    filter_or: bool = False
     updated_at: str | None = None
 
 

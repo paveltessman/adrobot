@@ -2,6 +2,9 @@
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
+from .create_models import CampaignCreateRequest
+from .create_models import CreatedIdentity
+from .create_models import CreationResource
 from .exceptions import KeitaroApiError
 from .models import Campaign
 from .models import CampaignConfiguration
@@ -13,6 +16,7 @@ from .models import Stream
 from .models import TrafficSource
 from .push_models import ProposedOffer
 from adrobot.services.network.http import AsyncHttpRequester
+from adrobot.services.network.http.types import JsonValue
 from adrobot.services.network.http.types import QueryParams
 
 _CAMPAIGNS = TypeAdapter(list[Campaign])
@@ -29,6 +33,63 @@ def create_keitaro_http_requester(base_url: str, api_key: str) -> AsyncHttpReque
 class KeitaroApiClient:
     def __init__(self, requester: AsyncHttpRequester) -> None:
         self._requester = requester
+
+    async def create_campaign(self, proposed: CampaignCreateRequest, alias: str) -> int:
+        response = await self._requester.post(
+            "campaigns",
+            json_data={
+                "name": proposed.name,
+                "alias": alias,
+                "type": "position",
+                "state": "active",
+                "domain_id": proposed.domain_id,
+                "group_id": str(proposed.group_id),
+                "traffic_source_id": proposed.traffic_source_id,
+            },
+            params=None,
+            headers=None,
+        )
+        try:
+            return CreatedIdentity.model_validate_json(response.body).id
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid created campaign response") from exc
+
+    async def create_stream(
+        self, campaign_id: int, payload: dict[str, JsonValue]
+    ) -> None:
+        if campaign_id < 1 or payload.get("campaign_id") != campaign_id:
+            raise ValueError("Stream campaign identity mismatch")
+        response = await self._requester.post(
+            "streams", json_data=payload, params=None, headers=None
+        )
+        try:
+            stream = Stream.model_validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid created stream response") from exc
+        if stream.id < 1 or stream.campaign_id != campaign_id:
+            raise KeitaroApiError("Created stream identity mismatch")
+
+    async def get_domain(self, domain_id: int) -> CreationResource:
+        return await self._get_creation_resource("domains", domain_id)
+
+    async def get_traffic_source(self, source_id: int) -> CreationResource:
+        return await self._get_creation_resource("traffic_sources", source_id)
+
+    async def _get_creation_resource(
+        self, path: str, resource_id: int
+    ) -> CreationResource:
+        if resource_id < 1:
+            raise ValueError("resource_id must be positive")
+        response = await self._requester.get(
+            f"{path}/{resource_id}", params=None, headers=None
+        )
+        try:
+            resource = CreationResource.model_validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid creation resource response") from exc
+        if resource.id != resource_id:
+            raise KeitaroApiError("Creation resource identity mismatch")
+        return resource
 
     async def get_domains(self) -> list[Domain]:
         return await self._get_creation_options("domains", TypeAdapter(list[Domain]))

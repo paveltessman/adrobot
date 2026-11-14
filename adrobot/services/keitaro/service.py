@@ -3,6 +3,9 @@ from asyncio import Lock
 from dataclasses import replace
 
 from .api_client import KeitaroApiClient
+from .create import CampaignCreator
+from .create_models import CampaignCreateRequest
+from .create_models import CampaignCreateResult
 from .exceptions import CampaignNotFoundError
 from .exceptions import OfferNotFoundError
 from .models import Campaign
@@ -35,6 +38,14 @@ class KeitaroService:
         self._database = database
         self._instance = instance
         self._refresh_lock = Lock()
+
+    async def create_campaign(
+        self, proposed: CampaignCreateRequest
+    ) -> CampaignCreateResult:
+        async with self._refresh_lock:
+            return await CampaignCreator(
+                self._api_client, self._load_campaign_details
+            ).create(proposed)
 
     async def get_domains(self) -> list[Domain]:
         return await self._api_client.get_domains()
