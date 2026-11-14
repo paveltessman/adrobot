@@ -12,11 +12,16 @@ from .models import CampaignStream
 from .models import Offer
 from .models import RemovedOffer
 from .models import Stream
+from .push import CampaignPusher
+from .push_models import CampaignPushRequest
+from .push_models import CampaignPushResult
+from .push_models import StreamChange
 from adrobot.services.network.http import HttpStatusError
 from adrobot.storage.database import Database
 from adrobot.storage.memberships import Membership
 from adrobot.storage.memberships import MembershipRepository
 from adrobot.storage.memberships import MembershipScope
+from adrobot.storage.memberships import PinRepository
 
 
 class KeitaroService:
@@ -54,6 +59,32 @@ class KeitaroService:
             return await self._load_campaign_details(campaign_id)
 
     async def _load_campaign_details(self, campaign_id: int) -> CampaignDetails:
+        details = await self._fetch_campaign_details(campaign_id)
+        await self._record_history(details, {})
+        return details
+
+    async def push_campaign(
+        self, campaign_id: int, proposed: CampaignPushRequest
+    ) -> CampaignPushResult:
+        async with self._refresh_lock:
+            pusher = CampaignPusher(
+                self._api_client, self._load_campaign_details, self._reconcile_push
+            )
+            return await pusher.push(campaign_id, proposed)
+
+    async def _reconcile_push(
+        self, campaign_id: int, attempted: dict[int, StreamChange]
+    ) -> CampaignDetails:
+        details = await self._fetch_campaign_details(campaign_id)
+        updates = {
+            stream.id: set(attempted[stream.id].pinned_offer_ids)
+            for stream in details.streams
+            if stream.id in attempted and attempted[stream.id].matches(stream)
+        }
+        await self._record_history(details, updates)
+        return details
+
+    async def _fetch_campaign_details(self, campaign_id: int) -> CampaignDetails:
 
         campaign = await self._get_campaign_configuration(campaign_id)
         streams = await self._api_client.get_streams(campaign_id)
@@ -70,15 +101,21 @@ class KeitaroService:
                 for stream in streams
             ],
         )
-        await self._record_history(details)
         return details
 
-    async def _record_history(self, details: CampaignDetails) -> None:
+    async def _record_history(
+        self, details: CampaignDetails, pin_updates: dict[int, set[int]]
+    ) -> None:
         async with self._database.transaction() as session:
             repository = MembershipRepository(session)
+            pins = PinRepository(session)
             for stream in details.streams:
                 scope = MembershipScope(self._instance, details.id, stream.id)
+                await self._save_pins(pins, scope, pin_updates)
                 current_ids = {item.offer_id for item in stream.offers}
+                stream.pinned_offer_ids = await self._reconcile_pins(
+                    pins, scope, current_ids
+                )
                 history = await repository.list(scope)
                 stream.removed_offers = [
                     RemovedOffer(
@@ -96,6 +133,23 @@ class KeitaroService:
                     await repository.save(
                         scope, Membership(offer.id, offer.name, offer.state, True)
                     )
+
+    @staticmethod
+    async def _save_pins(
+        pins: PinRepository, scope: MembershipScope, updates: dict[int, set[int]]
+    ) -> None:
+        if scope.stream_id in updates:
+            await pins.replace(scope, updates[scope.stream_id])
+
+    @staticmethod
+    async def _reconcile_pins(
+        pins: PinRepository, scope: MembershipScope, current_ids: set[int]
+    ) -> list[int]:
+        committed_ids = await pins.list(scope)
+        retained = [offer_id for offer_id in committed_ids if offer_id in current_ids]
+        if retained != committed_ids:
+            await pins.replace(scope, set(retained))
+        return retained
 
     async def _get_campaign_configuration(
         self,

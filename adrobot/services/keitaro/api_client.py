@@ -7,6 +7,7 @@ from .models import Campaign
 from .models import CampaignConfiguration
 from .models import Offer
 from .models import Stream
+from .push_models import ProposedOffer
 from adrobot.services.network.http import AsyncHttpRequester
 
 _CAMPAIGNS = TypeAdapter(list[Campaign])
@@ -23,6 +24,33 @@ def create_keitaro_http_requester(base_url: str, api_key: str) -> AsyncHttpReque
 class KeitaroApiClient:
     def __init__(self, requester: AsyncHttpRequester) -> None:
         self._requester = requester
+
+    async def update_stream_offers(
+        self, stream_id: int, offers: list[ProposedOffer]
+    ) -> None:
+        if stream_id < 1:
+            raise ValueError("stream_id must be positive")
+        response = await self._requester.put(
+            f"streams/{stream_id}",
+            json_data={
+                "offers": [
+                    {
+                        "offer_id": item.offer_id,
+                        "share": item.share,
+                        "state": item.state,
+                    }
+                    for item in offers
+                ]
+            },
+            params=None,
+            headers=None,
+        )
+        try:
+            stream = Stream.model_validate_json(response.body)
+        except ValidationError as exc:
+            raise KeitaroApiError("Invalid updated stream response") from exc
+        if stream.id != stream_id:
+            raise KeitaroApiError("Updated stream identity mismatch")
 
     async def get_offers(self) -> list[Offer]:
         response = await self._requester.get("offers", params=None, headers=None)

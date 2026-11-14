@@ -60,6 +60,7 @@ class RemovedOffer(_Base):
 class CampaignStream(Stream):
     offer_details: list[Offer]
     removed_offers: list[RemovedOffer]
+    pinned_offer_ids: list[int] = Field(default_factory=list[int])
 
 
 class CampaignDetails(CampaignConfiguration):

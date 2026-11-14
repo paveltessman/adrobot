@@ -35,6 +35,7 @@ function stream(shares: number[] = [100], id = 1): CampaignStream {
       name: `Offer ${index + 1}`,
       state: "active",
     })),
+    pinned_offer_ids: [],
     removed_offers: [
       { id: 9, name: "Historical", last_known_state: "deleted" },
     ],
@@ -255,4 +256,15 @@ test("invalid actions fail explicitly", () => {
   assert.throws(() => setPinned(draft, 9, true), /Removed offers/);
   for (const id of [0, -1, 1.5, NaN, Infinity])
     assert.throws(() => addOffer(draft, offer(id)), RangeError);
+});
+
+test("loads committed pins by default and Cancel restores them", () => {
+  const source = { ...stream([40, 60]), pinned_offer_ids: [1] };
+  const initial = createStreamDraft(source);
+  assert.equal(initial.offers[0].pinned, true);
+  assert.equal(hasChanges(initial), false);
+  const edited = addOffer(removeOffer(initial, 1), offer(9));
+  assert.equal(edited.offers.find((item) => item.id === 1)!.pinned, false);
+  assert.deepEqual(cancelDraft(edited).offers, initial.offers);
+  assert.equal(createStreamDraft(source).offers[0].pinned, true);
 });

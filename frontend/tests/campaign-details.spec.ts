@@ -14,6 +14,7 @@ const stream = {
   filters: [],
   offers: [],
   offer_details: [],
+  pinned_offer_ids: [],
   removed_offers: [],
 };
 const campaign = {
@@ -593,8 +594,7 @@ test("previews allocation changes and cancels all streams without remote writes"
   ).toContainText("Add · Traffic: 0% → 100%");
   await expect(
     summary.getByRole("button", { name: "Push", exact: true }),
-  ).toBeDisabled();
-  await expect(summary).toContainText("Push is not available yet");
+  ).toBeEnabled();
   await summary.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(summary).toHaveCount(0);
   await expect(
@@ -801,4 +801,28 @@ test("automatically searches after typing and clears stale results", async ({
   // Clearing the field does not fetch the full catalog automatically.
   await page.waitForTimeout(400);
   expect(queries).toEqual(["Summer"]);
+});
+
+test("committed pins load on visits and survive Cancel", async ({ page }) => {
+  const saved = {
+    ...campaign,
+    streams: campaign.streams.map((item) => ({
+      ...item,
+      pinned_offer_ids: item.id === 2 ? [9] : [],
+    })),
+  };
+  await page.route(api, (route) =>
+    route.fulfill({ json: { data: saved, error: null } }),
+  );
+  await page.goto("/campaigns/7");
+  const offers = page.getByRole("region", { name: "Offers", exact: true });
+  await expect(offers.getByText("Traffic share: 100% · Pinned")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Cancel", exact: true }),
+  ).toHaveCount(0);
+  await offers.getByRole("button", { name: "Unpin", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(offers.getByText("Traffic share: 100% · Pinned")).toBeVisible();
+  await page.reload();
+  await expect(offers.getByText("Traffic share: 100% · Pinned")).toBeVisible();
 });

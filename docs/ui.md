@@ -86,7 +86,7 @@ Show a change summary and persistent **Push** and **Cancel** actions while there
 - **Cancel** discards all pending changes, including pin changes, and returns to the last confirmed state without writing to Keitaro.
 - Disable Push when there are no changes or validation fails.
 - If synchronization fails, show the error and preserve the draft for correction or retry. If some writes succeeded, reconcile with Keitaro and show what remains unapplied; do not claim the entire operation succeeded or was rolled back.
-- Before applying a draft, check for changes made directly in Keitaro since the preview was based on it. If the affected stream changed, require a refreshed preview before pushing so external edits are not silently overwritten.
+- For now, assume campaign edits are made only through this frontend. Push validates the proposed changes but does not check whether the stream changed since the draft started. Concurrent edits from another browser tab or user, or directly in Keitaro, can be overwritten. External-change detection is deferred.
 - Warn before leaving a page with pending changes, allowing the user to stay or discard them.
 
 ## Implementation decisions to verify

@@ -29,6 +29,7 @@ const campaign = {
       filters: [],
       offers: [{ offer_id: 9, share: 100, state: "active" }],
       offer_details: [{ id: 9, name: "Offer", state: "active" }],
+      pinned_offer_ids: [],
       removed_offers: [
         { id: 10, name: "Old offer", last_known_state: "active" },
       ],
@@ -203,6 +204,34 @@ test("preserves network and cancellation errors", async () => {
       throw error;
     });
     await assert.rejects(getCampaignDetails(7), error);
+    mock.restoreAll();
+  }
+});
+
+test("loads committed pins and rejects malformed or detached pins", async () => {
+  for (const pinned_offer_ids of [
+    [9],
+    undefined,
+    null,
+    [9, 9],
+    [10],
+    [0],
+    ["9"],
+  ]) {
+    const data = {
+      ...campaign,
+      streams: [{ ...campaign.streams[0], pinned_offer_ids }],
+    };
+    mock.method(globalThis, "fetch", async () =>
+      Response.json({ data, error: null }),
+    );
+    if (
+      Array.isArray(pinned_offer_ids) &&
+      pinned_offer_ids.length === 1 &&
+      pinned_offer_ids[0] === 9
+    )
+      assert.deepEqual(await getCampaignDetails(7), data);
+    else await assert.rejects(getCampaignDetails(7), /invalid response/);
     mock.restoreAll();
   }
 });

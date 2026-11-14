@@ -7,6 +7,7 @@ from .database import Database
 from .memberships import Membership
 from .memberships import MembershipRepository
 from .memberships import MembershipScope
+from .memberships import PinRepository
 
 
 async def test_history_survives_reopen_and_updates_existing_entry(
@@ -68,5 +69,42 @@ async def test_scopes_are_isolated_and_failed_transactions_roll_back() -> None:
                     Membership(9, str(index), "active", True)
                 ]
             assert await repository.list(MembershipScope("unknown", 7, 2)) == []
+    finally:
+        await database.close()
+
+
+async def test_pins_survive_reopen_and_remain_scoped(tmp_path: Path) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'pins.sqlite3'}"
+    scopes = [
+        MembershipScope("first", 7, 2),
+        MembershipScope("second", 7, 2),
+        MembershipScope("first", 8, 2),
+        MembershipScope("first", 7, 3),
+    ]
+    database = Database(url)
+    try:
+        await database.initialize()
+        async with database.transaction() as session:
+            repository = PinRepository(session)
+            for index, scope in enumerate(scopes):
+                await repository.replace(scope, {9, 10 + index})
+    finally:
+        await database.close()
+    database = Database(url)
+    try:
+        await database.initialize()
+        with pytest.raises(RuntimeError, match="abort"):
+            async with database.transaction() as session:
+                await PinRepository(session).replace(scopes[0], {99})
+                await session.flush()
+                raise RuntimeError("abort")
+        async with database.transaction() as session:
+            repository = PinRepository(session)
+            for index, scope in enumerate(scopes):
+                assert await repository.list(scope) == [9, 10 + index]
+            await repository.replace(scopes[0], set())
+        async with database.transaction() as session:
+            assert await PinRepository(session).list(scopes[0]) == []
+            assert await PinRepository(session).list(scopes[1]) == [9, 11]
     finally:
         await database.close()
