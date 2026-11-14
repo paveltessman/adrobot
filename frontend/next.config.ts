@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/v1/integrations/keitaro/offers/:id",
+        destination: `${backendOrigin.origin}/api/v1/integrations/keitaro/offers/:id`,
+      },
+      {
+        source: "/api/v1/integrations/keitaro/offers",
+        destination: `${backendOrigin.origin}/api/v1/integrations/keitaro/offers`,
+      },
+      {
         source: "/api/v1/integrations/keitaro/campaigns/:id",
         destination: `${backendOrigin.origin}/api/v1/integrations/keitaro/campaigns/:id`,
       },

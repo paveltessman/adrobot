@@ -1,6 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { StreamOfferEditor } from "@/components/stream-offer-editor";
+import { CampaignDraftSummary } from "@/components/campaign-draft-summary";
+import {
+  cancelDraft,
+  createStreamDraft,
+  hasChanges,
+  type StreamDraft,
+} from "@/lib/campaign-draft";
+import { useDraftNavigation } from "@/lib/use-draft-navigation";
 import { ArrowLeft, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,7 +23,12 @@ import {
 type LoadState =
   | { status: "loading" }
   | { status: "error" | "missing" }
-  | { status: "ready"; campaign: CampaignDetails };
+  | {
+      status: "ready";
+      campaign: CampaignDetails;
+      drafts: Record<number, StreamDraft>;
+      revision: number;
+    };
 
 function Fields({ values }: { values: [string, string | number | null][] }) {
   return (
@@ -34,9 +48,15 @@ function Fields({ values }: { values: [string, string | number | null][] }) {
 function StreamView({
   stream,
   showRemoved,
+  draft,
+  revision,
+  setDraft,
 }: {
   stream: CampaignStream;
   showRemoved: boolean;
+  draft?: StreamDraft;
+  revision: number;
+  setDraft: (update: (current: StreamDraft) => StreamDraft) => void;
 }) {
   return (
     <section
@@ -81,8 +101,16 @@ function StreamView({
         </details>
       )}
       <h4 className="mt-7 font-medium">Offers</h4>
-      {stream.offers.length === 0 &&
-      (!showRemoved || stream.removed_offers.length === 0) ? (
+      {draft ? (
+        <StreamOfferEditor
+          key={revision}
+          stream={stream}
+          showRemoved={showRemoved}
+          draft={draft}
+          setDraft={setDraft}
+        />
+      ) : stream.offers.length === 0 &&
+        (!showRemoved || stream.removed_offers.length === 0) ? (
         <p className="mt-3 text-sm text-muted-foreground">
           No offers attached to this stream.
         </p>
@@ -152,12 +180,25 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
   const [attempt, setAttempt] = useState(0);
   const [showRemoved, setShowRemoved] = useState(false);
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const dirty =
+    state.status === "ready" && Object.values(state.drafts).some(hasChanges);
+  const confirmLeave = useDraftNavigation(dirty);
   useEffect(() => {
     if (!validId) return;
     const controller = new AbortController();
     getCampaignDetails(campaignId, controller.signal).then(
       (campaign) => {
-        if (!controller.signal.aborted) setState({ status: "ready", campaign });
+        if (!controller.signal.aborted)
+          setState({
+            status: "ready",
+            campaign,
+            revision: 0,
+            drafts: Object.fromEntries(
+              campaign.streams
+                .filter((stream) => stream.schema === "landings")
+                .map((stream) => [stream.id, createStreamDraft(stream)]),
+            ),
+          });
       },
       (error) => {
         if (!controller.signal.aborted)
@@ -172,7 +213,13 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
 
   return (
     <>
-      <Link href="/" className={buttonVariants({ variant: "outline" })}>
+      <Link
+        href="/"
+        className={buttonVariants({ variant: "outline" })}
+        onNavigate={(event) => {
+          if (!confirmLeave()) event.preventDefault();
+        }}
+      >
         <ArrowLeft aria-hidden="true" /> Back to campaigns
       </Link>
       {!validId || state.status === "missing" ? (
@@ -218,8 +265,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                 Keitaro ID: {state.campaign.id}
               </p>
               <p className="mt-3 text-sm text-muted-foreground">
-                View campaign configuration and offers. Offer editing is coming
-                soon.
+                Stage offer changes locally. Changes are not saved yet;
+                reloading or leaving this page discards them.
               </p>
             </div>
             <section
@@ -268,11 +315,51 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                       key={stream.id}
                       stream={stream}
                       showRemoved={showRemoved}
+                      draft={state.drafts[stream.id]}
+                      revision={state.revision}
+                      setDraft={(update) =>
+                        setState((current) => {
+                          // Ignore lookups belonging to a draft canceled in the meantime.
+                          if (
+                            current.status !== "ready" ||
+                            current.revision !== state.revision ||
+                            !current.drafts[stream.id]
+                          )
+                            return current;
+                          return {
+                            ...current,
+                            drafts: {
+                              ...current.drafts,
+                              [stream.id]: update(current.drafts[stream.id]),
+                            },
+                          };
+                        })
+                      }
                     />
                   ))}
                 </div>
               )}
             </section>
+            <CampaignDraftSummary
+              streams={state.campaign.streams}
+              drafts={state.drafts}
+              onCancel={() =>
+                setState((current) =>
+                  current.status !== "ready"
+                    ? current
+                    : {
+                        ...current,
+                        revision: current.revision + 1,
+                        drafts: Object.fromEntries(
+                          Object.entries(current.drafts).map(([id, draft]) => [
+                            id,
+                            cancelDraft(draft),
+                          ]),
+                        ),
+                      },
+                )
+              }
+            />
           </>
         )
       )}
