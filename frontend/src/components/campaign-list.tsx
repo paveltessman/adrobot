@@ -7,9 +7,10 @@ import {
   Plus,
   RotateCw,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { getCampaigns, type CampaignPage } from "@/lib/campaigns";
 
 const PAGE_SIZE = 20;
@@ -62,8 +63,7 @@ export function CampaignList() {
         </Button>
       </div>
       <p id="creation-note" className="mt-6 text-sm text-muted-foreground">
-        Campaign creation and details are coming soon. You can browse existing
-        campaigns below.
+        Campaign creation is coming soon. Select a campaign to view its details.
       </p>
       <div
         className="mt-6 overflow-hidden rounded-xl border bg-background"
@@ -137,14 +137,13 @@ export function CampaignList() {
                     Keitaro ID: {campaign.id}
                   </p>
                 </div>
-                <Button
-                  disabled
-                  variant="outline"
+                <Link
+                  href={`/campaigns/${campaign.id}`}
+                  className={buttonVariants({ variant: "outline" })}
                   aria-label={`Open details for ${campaign.name || "Unnamed campaign"}`}
-                  aria-describedby="creation-note"
                 >
                   Details <ArrowRight aria-hidden="true" />
-                </Button>
+                </Link>
               </li>
             ))}
           </ul>

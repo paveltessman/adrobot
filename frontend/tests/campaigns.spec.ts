@@ -21,7 +21,7 @@ async function fulfillPage(
   });
 }
 
-test("shows loading, then campaign names and IDs with unavailable actions", async ({
+test("shows loading, then campaign names and IDs with a details link", async ({
   page,
 }, testInfo) => {
   let release!: () => void;
@@ -46,8 +46,8 @@ test("shows loading, then campaign names and IDs with unavailable actions", asyn
     page.getByRole("button", { name: "Create campaign" }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "Open details for Summer campaign" }),
-  ).toBeDisabled();
+    page.getByRole("link", { name: "Open details for Summer campaign" }),
+  ).toHaveAttribute("href", "/campaigns/42");
   await expect(page.getByText("Page 1 · Showing 1–1")).toBeVisible();
   await expect(page.getByRole("button", { name: "Previous" })).toBeDisabled();
   await expect(
