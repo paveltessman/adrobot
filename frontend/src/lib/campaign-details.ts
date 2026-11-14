@@ -13,7 +13,7 @@ export interface CampaignStream {
   position: number;
   schema: string;
   action_type: string;
-  action_payload: string | Record<string, unknown>;
+  action_payload: string | Record<string, unknown> | unknown[] | null;
   filters: Record<string, unknown>[];
   offers: StreamOffer[];
   offer_details: { id: number; name: string; state: string }[];
@@ -53,8 +53,10 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
       (key) => typeof value[key] === "string",
     ) &&
     Number.isSafeInteger(value.position) &&
-    (typeof value.action_payload === "string" ||
-      record(value.action_payload)) &&
+    (value.action_payload === null ||
+      typeof value.action_payload === "string" ||
+      record(value.action_payload) ||
+      Array.isArray(value.action_payload)) &&
     Array.isArray(value.filters) &&
     value.filters.every(record) &&
     Array.isArray(memberships) &&

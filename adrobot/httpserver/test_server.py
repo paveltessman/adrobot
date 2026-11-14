@@ -327,7 +327,10 @@ async def test_campaigns_upstream_failures(
 
 
 @pytest.mark.parametrize("empty", [False, True])
-async def test_campaign_details(settings: Settings, empty: bool) -> None:
+@pytest.mark.parametrize("payload", [{}, [], None])
+async def test_campaign_details(
+    settings: Settings, empty: bool, payload: object
+) -> None:
     calls: list[str] = []
     campaign = {
         "id": 7,
@@ -358,7 +361,7 @@ async def test_campaign_details(settings: Settings, empty: bool) -> None:
                 3,
                 "Other offers",
                 "landings",
-                dict[str, object](),
+                payload,
                 [] if empty else [membership],
             ),
         ]

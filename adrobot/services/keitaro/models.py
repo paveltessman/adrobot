@@ -44,7 +44,7 @@ class Stream(_Base):
     state: str
     position: int
     action_type: str
-    action_payload: str | dict[str, JsonValue]
+    action_payload: str | dict[str, JsonValue] | list[JsonValue] | None
     routing_schema: str = Field(alias="schema")
     filters: list[dict[str, JsonValue]]
     offers: list[StreamOffer]

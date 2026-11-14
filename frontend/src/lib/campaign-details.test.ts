@@ -37,6 +37,36 @@ const campaign = {
 };
 afterEach(() => mock.restoreAll());
 
+for (const action_payload of [[], null]) {
+  test(`loads ${JSON.stringify(action_payload)} action payload with three offers`, async () => {
+    const offers = [9, 10, 11].map((id) => ({
+      id,
+      name: `Offer ${id}`,
+      state: "active",
+    }));
+    const data = {
+      ...campaign,
+      streams: [
+        {
+          ...campaign.streams[0],
+          action_payload,
+          offers: offers.map(({ id }) => ({
+            offer_id: id,
+            share: 100,
+            state: "active",
+          })),
+          offer_details: offers,
+          removed_offers: [],
+        },
+      ],
+    };
+    mock.method(globalThis, "fetch", async () =>
+      Response.json({ data, error: null }),
+    );
+    assert.deepEqual(await getCampaignDetails(7), data);
+  });
+}
+
 test("loads full details without caching and forwards cancellation", async () => {
   const fetchMock = mock.method(globalThis, "fetch", async () =>
     Response.json({ data: campaign, error: null }),
