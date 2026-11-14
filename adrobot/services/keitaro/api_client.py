@@ -35,19 +35,24 @@ class KeitaroApiClient:
         self._requester = requester
 
     async def create_campaign(self, proposed: CampaignCreateRequest, alias: str) -> int:
+        payload: dict[str, JsonValue] = {
+            "name": proposed.name,
+            "alias": alias,
+            "type": "position",
+            "state": "active",
+        }
+        selected: dict[str, JsonValue] = {
+            "domain_id": proposed.domain_id,
+            "group_id": (
+                str(proposed.group_id) if proposed.group_id is not None else None
+            ),
+            "traffic_source_id": proposed.traffic_source_id,
+        }
+        payload.update(
+            {key: value for key, value in selected.items() if value is not None}
+        )
         response = await self._requester.post(
-            "campaigns",
-            json_data={
-                "name": proposed.name,
-                "alias": alias,
-                "type": "position",
-                "state": "active",
-                "domain_id": proposed.domain_id,
-                "group_id": str(proposed.group_id),
-                "traffic_source_id": proposed.traffic_source_id,
-            },
-            params=None,
-            headers=None,
+            "campaigns", json_data=payload, params=None, headers=None
         )
         try:
             return CreatedIdentity.model_validate_json(response.body).id

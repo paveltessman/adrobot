@@ -42,7 +42,7 @@ def stream_payloads(
                 {
                     "name": "country",
                     "mode": "accept",
-                    "payload": [proposed.country_code],
+                    "payload": list(proposed.country_codes),
                 }
             ],
             "offers": [],
@@ -92,27 +92,40 @@ class CampaignCreator:
     async def _validate_resources(self, proposed: CampaignCreateRequest) -> None:
         try:
             offer = await self._client.get_offer(proposed.offer_id)
-            domain = await self._client.get_domain(proposed.domain_id)
-            source = await self._client.get_traffic_source(proposed.traffic_source_id)
+            if offer.state not in {"active", "disabled"}:
+                raise InvalidCampaignCreation("Selected offer is unavailable")
+            await self._validate_optional_resources(proposed)
         except HttpStatusError as exc:
             if exc.response.status_code == 404:
                 raise InvalidCampaignCreation(
                     "Selected resource is unavailable"
                 ) from exc
             raise
-        self._validate_states(offer.state, domain.state, source.state)
+
+    async def _validate_optional_resources(
+        self, proposed: CampaignCreateRequest
+    ) -> None:
+        if proposed.domain_id is not None:
+            domain = await self._client.get_domain(proposed.domain_id)
+            self._validate_resource_state(domain.state, {"active"}, "domain")
+        if proposed.traffic_source_id is not None:
+            source = await self._client.get_traffic_source(proposed.traffic_source_id)
+            self._validate_resource_state(
+                source.state, {"active", "disabled"}, "traffic source"
+            )
+        await self._validate_group(proposed.group_id)
+
+    async def _validate_group(self, group_id: int | None) -> None:
+        if group_id is None:
+            return
         groups = await self._client.get_campaign_groups()
-        if proposed.group_id not in {group.id for group in groups}:
+        if group_id not in {group.id for group in groups}:
             raise InvalidCampaignCreation("Selected campaign group is unavailable")
 
     @staticmethod
-    def _validate_states(offer: str, domain: str, source: str) -> None:
-        if offer not in {"active", "disabled"}:
-            raise InvalidCampaignCreation("Selected offer is unavailable")
-        if domain != "active" or source not in {"active", "disabled"}:
-            raise InvalidCampaignCreation(
-                "Selected domain or traffic source is unavailable"
-            )
+    def _validate_resource_state(state: str, allowed: set[str], label: str) -> None:
+        if state not in allowed:
+            raise InvalidCampaignCreation(f"Selected {label} is unavailable")
 
     @staticmethod
     def _campaign_failure(exc: NetworkError | KeitaroApiError) -> CampaignCreateResult:
@@ -178,7 +191,11 @@ class CampaignCreator:
             "group_id": proposed.group_id,
             "traffic_source_id": proposed.traffic_source_id,
         }
-        if any(campaign.model_dump().get(k) != v for k, v in configuration.items()):
+        actual = campaign.model_dump()
+        if any(
+            not CampaignCreator._configuration_matches(actual.get(k), v)
+            for k, v in configuration.items()
+        ):
             return False
         streams = sorted(campaign.streams, key=lambda stream: stream.position)
         expected = stream_payloads(campaign.id, proposed)
@@ -186,6 +203,12 @@ class CampaignCreator:
             CampaignCreator._stream_matches(stream, payload)
             for stream, payload in zip(streams, expected)
         )
+
+    @staticmethod
+    def _configuration_matches(actual: object, expected: object) -> bool:
+        if expected is None:
+            return actual is None or actual == 0
+        return actual == expected
 
     @staticmethod
     def _stream_matches(stream: CampaignStream, expected: dict[str, JsonValue]) -> bool:
@@ -201,4 +224,14 @@ class CampaignCreator:
                 payload = json.loads(payload)
             except ValueError:
                 pass
+        if item.get("name") == "country":
+            payload = CampaignCreator._countries(payload)
         return {"name": item.get("name"), "mode": item.get("mode"), "payload": payload}
+
+    @staticmethod
+    def _countries(payload: JsonValue) -> JsonValue:
+        if isinstance(payload, list):
+            countries = [value for value in payload if isinstance(value, str)]
+            if len(countries) == len(payload):
+                return list[JsonValue](sorted(set(countries)))
+        return payload

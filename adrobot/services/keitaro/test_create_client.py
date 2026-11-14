@@ -149,3 +149,46 @@ async def test_creation_resource_validation(resource: str, body: str) -> None:
             )
             with pytest.raises(KeitaroApiError):
                 await load(2)
+
+
+@pytest.mark.parametrize("domain", [False, True])
+@pytest.mark.parametrize("group", [False, True])
+@pytest.mark.parametrize("source", [False, True])
+async def test_creation_omits_unselected_resources(
+    domain: bool, group: bool, source: bool
+) -> None:
+    from .create_models import CampaignCreateRequest
+
+    selected = {
+        "domain_id": 2 if domain else None,
+        "group_id": 3 if group else None,
+        "traffic_source_id": 4 if source else None,
+    }
+    request = CampaignCreateRequest.model_validate(
+        {"name": "Example", "country_codes": ["AU", "US"], "offer_id": 9, **selected}
+    )
+    expected: dict[str, object] = {
+        "name": "Example",
+        "alias": "alias",
+        "type": "position",
+        "state": "active",
+    }
+    expected.update(
+        {
+            key: str(value) if key == "group_id" else value
+            for key, value in selected.items()
+            if value is not None
+        }
+    )
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.method == "POST"
+        assert request.path == "/admin_api/v1/campaigns"
+        assert await request.json() == expected
+        return web.json_response({"id": 7})
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            assert (
+                await KeitaroApiClient(requester).create_campaign(request, "alias") == 7
+            )

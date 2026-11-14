@@ -30,7 +30,7 @@ from adrobot.storage.memberships import MembershipScope
 def proposed() -> CampaignCreateRequest:
     return CampaignCreateRequest(
         name="Example",
-        country_code="AU",
+        country_codes=["AU"],
         offer_id=9,
         domain_id=2,
         group_id=3,
@@ -131,9 +131,9 @@ async def test_creates_and_confirms_campaign_and_history(case: CreationCase) -> 
     [
         ("name", ""),
         ("name", "  "),
-        ("country_code", "AUS"),
-        ("country_code", "au"),
-        ("country_code", "12"),
+        ("country_codes", ["AUS"]),
+        ("country_codes", ["au"]),
+        ("country_codes", ["12"]),
         ("offer_id", 0),
         ("domain_id", -1),
         ("group_id", True),
@@ -307,3 +307,152 @@ async def test_mismatched_streams_are_not_success(
     case.create_stream.side_effect = write
     result = await case.service.create_campaign(proposed())
     assert result.status == "partial"
+
+
+@pytest.mark.parametrize(
+    "countries", [[], None, "AU", [""], [None], [True], ["AU", "AUS"]]
+)
+def test_rejects_invalid_country_lists(countries: object) -> None:
+    payload: dict[str, object] = {
+        "name": "Example",
+        "offer_id": 9,
+        "country_codes": countries,
+    }
+    with pytest.raises(ValidationError):
+        CampaignCreateRequest.model_validate(payload)
+
+
+def test_country_list_is_nonempty_required_and_deduplicated() -> None:
+    with pytest.raises(ValidationError):
+        CampaignCreateRequest.model_validate({"name": "Example", "offer_id": 9})
+    request = CampaignCreateRequest(
+        name="Example", offer_id=9, country_codes=["US", "AU", "AU"]
+    )
+    assert request.country_codes == ["AU", "US"]
+    assert stream_payloads(7, request)[0]["filters"] == [
+        {"name": "country", "mode": "accept", "payload": ["AU", "US"]}
+    ]
+    assert stream_payloads(7, request)[1]["filters"] == []
+
+
+def test_legacy_country_request_still_validates() -> None:
+    request = CampaignCreateRequest.model_validate(
+        {"name": "Example", "offer_id": 9, "country_code": "AU"}
+    )
+    assert request.country_codes == ["AU"]
+    assert request.domain_id is None
+    assert request.group_id is None
+    assert request.traffic_source_id is None
+
+
+@pytest.mark.parametrize("legacy", [None, "", "AUS", "au", ["AU"]])
+def test_invalid_legacy_country_is_rejected(legacy: object) -> None:
+    with pytest.raises(ValidationError):
+        CampaignCreateRequest.model_validate(
+            {"name": "Example", "offer_id": 9, "country_code": legacy}
+        )
+
+
+def test_both_country_fields_are_rejected() -> None:
+    with pytest.raises(ValidationError, match="not both"):
+        CampaignCreateRequest.model_validate(
+            {
+                "name": "Example",
+                "offer_id": 9,
+                "country_code": "AU",
+                "country_codes": ["US"],
+            }
+        )
+
+
+@pytest.mark.parametrize("field", ["domain_id", "group_id", "traffic_source_id"])
+@pytest.mark.parametrize("value", [0, -1, "", "0", "2", True, 2.5])
+def test_optional_resource_still_requires_positive_integer(
+    field: str, value: object
+) -> None:
+    payload: dict[str, object] = {
+        "name": "Example",
+        "offer_id": 9,
+        "country_codes": ["AU"],
+        field: value,
+    }
+    with pytest.raises(ValidationError):
+        CampaignCreateRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize("domain", [False, True])
+@pytest.mark.parametrize("group", [False, True])
+@pytest.mark.parametrize("source", [False, True])
+@pytest.mark.parametrize("empty", [None, 0])
+async def test_validates_only_selected_optional_resources(
+    case: CreationCase, domain: bool, group: bool, source: bool, empty: int | None
+) -> None:
+    request = CampaignCreateRequest(
+        name="Example",
+        offer_id=9,
+        country_codes=["AU", "US"],
+        domain_id=2 if domain else None,
+        group_id=3 if group else None,
+        traffic_source_id=4 if source else None,
+    )
+    configuration: CampaignConfiguration = case.configuration.return_value
+    configuration.domain_id = 2 if domain else empty
+    configuration.group_id = 3 if group else empty
+    configuration.traffic_source_id = 4 if source else empty
+    for selected, lookup in [
+        (domain, case.domain),
+        (group, case.groups),
+        (source, case.source),
+    ]:
+        if not selected:
+            lookup.side_effect = NetworkError("Unselected resources must not be loaded")
+    result = await case.service.create_campaign(request)
+    assert result.status == "created"
+    assert case.domain.await_count == int(domain)
+    assert case.groups.await_count == int(group)
+    assert case.source.await_count == int(source)
+    case.offer.assert_awaited()
+
+
+@pytest.mark.parametrize("field", ["domain_id", "group_id", "traffic_source_id"])
+async def test_unexpected_assignment_is_not_confirmed(
+    case: CreationCase, field: str
+) -> None:
+    request = CampaignCreateRequest(name="Example", offer_id=9, country_codes=["AU"])
+    configuration: CampaignConfiguration = case.configuration.return_value
+    configuration.domain_id = configuration.group_id = (
+        configuration.traffic_source_id
+    ) = None
+    setattr(configuration, field, 99)
+    result = await case.service.create_campaign(request)
+    assert result.status == "partial"
+
+
+async def test_country_order_does_not_change_confirmation(case: CreationCase) -> None:
+    write = case.create_stream.side_effect
+
+    def reordered(campaign_id: int, payload: dict[str, object]) -> None:
+        assert callable(write)
+        write(campaign_id, payload)
+        if payload["position"] == 1:
+            streams: list[Stream] = case.streams.return_value
+            streams[0].filters[0]["payload"] = ["US", "AU"]
+
+    case.create_stream.side_effect = reordered
+    request = proposed().model_copy(update={"country_codes": ["AU", "US"]})
+    assert (await case.service.create_campaign(request)).status == "created"
+
+
+async def test_missing_country_is_not_confirmed(case: CreationCase) -> None:
+    write = case.create_stream.side_effect
+
+    def missing(campaign_id: int, payload: dict[str, object]) -> None:
+        assert callable(write)
+        write(campaign_id, payload)
+        if payload["position"] == 1:
+            streams: list[Stream] = case.streams.return_value
+            streams[0].filters[0]["payload"] = ["AU"]
+
+    case.create_stream.side_effect = missing
+    request = proposed().model_copy(update={"country_codes": ["AU", "US"]})
+    assert (await case.service.create_campaign(request)).status == "partial"

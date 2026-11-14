@@ -96,7 +96,7 @@ async def test_creation_preflight_errors(
     "update",
     [
         {"name": " "},
-        {"country_code": "USA"},
+        {"country_codes": ["USA"]},
         {"offer_id": 0},
         {"domain_id": True},
         {"group_id": "3"},
@@ -120,6 +120,8 @@ async def test_invalid_creation_never_calls_service(
 @dataclass
 class Tracker:
     reject_offer_stream: bool
+    empty_resources: bool = False
+    reads: list[str] = field(default_factory=list[str])
     configuration: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     streams: list[dict[str, JsonValue]] = field(
         default_factory=list[dict[str, JsonValue]]
@@ -128,8 +130,13 @@ class Tracker:
 
     async def post_campaign(self, request: web.Request) -> web.Response:
         payload = TypeAdapter(dict[str, JsonValue]).validate_json(await request.text())
-        assert payload["group_id"] == "3"
-        self.configuration.update({**payload, "id": 7, "group_id": 3})
+        assert payload.get("group_id") == (None if self.empty_resources else "3")
+        defaults: dict[str, JsonValue] = (
+            {"domain_id": None, "group_id": 0, "traffic_source_id": 0}
+            if self.empty_resources
+            else {"group_id": 3}
+        )
+        self.configuration.update({**payload, **defaults, "id": 7})
         return web.json_response(self.configuration)
 
     async def post_stream(self, request: web.Request) -> web.Response:
@@ -149,6 +156,7 @@ class Tracker:
                 if request.path.endswith("/campaigns")
                 else self.post_stream(request)
             )
+        self.reads.append(request.path)
         resources: dict[str, JsonValue] = {
             "offers/9": {"id": 9, "name": "Offer", "state": "active"},
             "domains/2": {"id": 2, "state": "active"},
@@ -192,3 +200,61 @@ async def test_creation_through_real_service_and_client(
         "/admin_api/v1/streams",
         "/admin_api/v1/streams",
     ]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_legacy_and_multiple_country_creation_without_resources(
+    settings: Settings, legacy: bool
+) -> None:
+    tracker = Tracker(reject_offer_stream=False, empty_resources=True)
+    payload: dict[str, JsonValue] = {"name": "Example", "offer_id": 9}
+    payload.update(
+        {"country_code": "AU"} if legacy else {"country_codes": ["US", "AU", "US"]}
+    )
+    async with api_server(tracker.handler) as base_url:
+        configured = settings.model_copy(
+            update={"ADROBOT_KEITARO_BASE_URL": HttpUrl(base_url)}
+        )
+        async with http_client(create_app(configured)) as client:
+            response = await client.post(_PATH, json=payload)
+            assert response.status == 200
+            body = await response.json()
+            assert body["data"]["status"] == "created"
+            assert body["data"]["campaign"]["domain_id"] is None
+            assert body["data"]["campaign"]["group_id"] == 0
+            assert body["data"]["campaign"]["traffic_source_id"] == 0
+    assert tracker.streams[0]["filters"] == [
+        {
+            "name": "country",
+            "mode": "accept",
+            "payload": ["AU"] if legacy else ["AU", "US"],
+        }
+    ]
+    assert not any(
+        path.endswith(("/domains/2", "/traffic_sources/4", "/groups"))
+        for path in tracker.reads
+    )
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"country_codes": []},
+        {"country_codes": "AU"},
+        {"country_codes": ["AU", "USA"]},
+        {"country_codes": [None]},
+        {"country_code": "AU"},
+        {"domain_id": 0},
+    ],
+)
+async def test_invalid_new_creation_fields_prevent_service_call(
+    settings: Settings, update: dict[str, JsonValue]
+) -> None:
+    app, create = creation_app(settings, InvalidCampaignCreation("must not run"))
+    payload = proposed().model_dump()
+    payload.update(update)
+    async with http_client(app) as client:
+        response = await client.post(_PATH, json=payload)
+        assert response.status == 422
+        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+    create.assert_not_awaited()

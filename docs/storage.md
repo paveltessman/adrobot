@@ -13,6 +13,14 @@ This document records the storage decisions supporting the planned interface in 
 
 Keitaro is authoritative for campaign configuration and current stream membership. The application database is authoritative for observed membership history and committed pin preferences.
 
+## Campaign creation inputs
+
+Creation accepts a nonempty `country_codes` array of uppercase two-letter country codes. Duplicate codes are removed; a single country filter routes traffic from any selected country to Google. Country order does not affect confirmation. The legacy `country_code` string remains accepted during the frontend transition; providing both fields is rejected.
+
+Domain, group, and traffic source IDs are independently optional. Omitted or `null` IDs leave the corresponding selection unset. Selected IDs must be positive integers and are checked for availability before writing. Unselected resources require no lookup, and their fields are omitted from the Keitaro creation request.
+
+A read-only check of existing campaigns on the configured tracker on 2026-11-14 observed unset domains as `null` and unset groups and traffic sources as integer `0`. Confirmation treats `null` and `0` as empty for optional IDs; an unexpected assigned ID is not treated as a successful match. Creation without these selections has not been verified with a live write.
+
 ## Observed offers and removals
 
 Retain a membership record scoped to the Keitaro instance, campaign, stream, and offer. It must retain the offer identity, last known display details such as its name, and whether it was attached at the last successful refresh.
