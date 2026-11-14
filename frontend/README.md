@@ -37,6 +37,10 @@ and firewall rules enforce backend isolation. No browser CORS setup is needed.
 
 The browser loader in `src/lib/campaigns.ts` uses a relative API URL, disables
 caching, validates responses, and accepts an `AbortSignal` for cancellation.
-The campaign list UI will use this loader in the next implementation step.
 
 Run `npm test` for loader tests using Node's built-in TypeScript test runner.
+
+For browser tests, run `npx playwright install chromium`, `npm run build`, then
+`npm run test:e2e`. Tests start a production Next.js server on port 3199 and mock
+API responses in the browser; no FastAPI or Keitaro connection is required.
+The same scenarios run at desktop and mobile sizes.
