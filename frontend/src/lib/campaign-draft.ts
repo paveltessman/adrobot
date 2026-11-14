@@ -197,3 +197,49 @@ export function cancelDraft(draft: StreamDraft): StreamDraft {
     error: null,
   };
 }
+
+export interface OfferChange {
+  id: number;
+  name: string;
+  membership: "addition" | "restoration" | "removal" | null;
+  currentShare: number;
+  proposedShare: number;
+  currentPinned: boolean;
+  proposedPinned: boolean;
+}
+
+export function offerChanges(draft: StreamDraft): OfferChange[] {
+  return draft.offers.flatMap((offer) => {
+    const previous = draft.baseline.find((item) => item.id === offer.id);
+    const wasAttached = previous?.attached ?? false;
+    if (!wasAttached && !offer.attached) return [];
+    const currentShare = wasAttached ? previous!.share : 0;
+    const proposedShare = offer.attached ? offer.share : 0;
+    const currentPinned = wasAttached && previous!.pinned;
+    const proposedPinned = offer.attached && offer.pinned;
+    if (
+      wasAttached === offer.attached &&
+      currentShare === proposedShare &&
+      currentPinned === proposedPinned
+    )
+      return [];
+    return [
+      {
+        id: offer.id,
+        name: offer.name,
+        membership:
+          wasAttached === offer.attached
+            ? null
+            : !offer.attached
+              ? "removal"
+              : previous
+                ? "restoration"
+                : "addition",
+        currentShare,
+        proposedShare,
+        currentPinned,
+        proposedPinned,
+      },
+    ];
+  });
+}

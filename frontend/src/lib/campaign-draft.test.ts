@@ -7,6 +7,7 @@ import {
   createStreamDraft,
   hasChanges,
   membershipStatus,
+  offerChanges,
   removeOffer,
   setPinned,
   type StreamDraft,
@@ -58,6 +59,53 @@ test("initialization preserves confirmed shares, states, and committed pins", ()
   assert.equal(draft.offers[2].pinned, false);
   assert.equal(hasChanges(draft), false);
   assert.deepEqual(source, before);
+});
+
+test("change summaries include allocation and pin changes without historical noise", () => {
+  const initial = createStreamDraft(stream([40, 60]), [1]);
+  assert.deepEqual(offerChanges(initial), []);
+  const draft = addOffer(removeOffer(initial, 1), offer(9));
+  assert.deepEqual(offerChanges(draft), [
+    {
+      id: 1,
+      name: "Offer 1",
+      membership: "removal",
+      currentShare: 40,
+      proposedShare: 0,
+      currentPinned: true,
+      proposedPinned: false,
+    },
+    {
+      id: 2,
+      name: "Offer 2",
+      membership: null,
+      currentShare: 60,
+      proposedShare: 50,
+      currentPinned: false,
+      proposedPinned: false,
+    },
+    {
+      id: 9,
+      name: "Offer 9",
+      membership: "restoration",
+      currentShare: 0,
+      proposedShare: 50,
+      currentPinned: false,
+      proposedPinned: false,
+    },
+  ]);
+  assert.deepEqual(offerChanges(cancelDraft(draft)), []);
+});
+
+test("summaries include pin-only edits and omit additions undone before Push", () => {
+  const initial = createStreamDraft(stream());
+  const pinned = setPinned(initial, 1, true);
+  assert.equal(offerChanges(pinned)[0].proposedPinned, true);
+  assert.equal(offerChanges(pinned)[0].currentShare, 100);
+  assert.equal(offerChanges(pinned)[0].proposedShare, 100);
+  const added = addOffer(initial, offer(2));
+  assert.equal(offerChanges(added)[1].membership, "addition");
+  assert.deepEqual(offerChanges(removeOffer(added, 2)), []);
 });
 
 test("equal balancing matches the documented examples and conserves 100%", () => {

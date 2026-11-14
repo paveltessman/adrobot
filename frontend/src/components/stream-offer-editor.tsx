@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import type { CampaignStream } from "@/lib/campaign-details";
 import {
   addOffer,
-  createStreamDraft,
   membershipStatus,
   removeOffer,
   setPinned,
+  type StreamDraft,
 } from "@/lib/campaign-draft";
 import {
   getOffer,
@@ -20,11 +20,14 @@ import {
 export function StreamOfferEditor({
   stream,
   showRemoved,
+  draft,
+  setDraft,
 }: {
   stream: CampaignStream;
   showRemoved: boolean;
+  draft: StreamDraft;
+  setDraft: (update: (current: StreamDraft) => StreamDraft) => void;
 }) {
-  const [draft, setDraft] = useState(() => createStreamDraft(stream));
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<{
     status: "idle" | "loading" | "ready" | "error";
@@ -37,6 +40,26 @@ export function StreamOfferEditor({
   );
   const searchRequest = useRef<AbortController | null>(null);
   const lookupRequest = useRef<AbortController | null>(null);
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  useEffect(() => {
+    if (!query.trim() && searchAttempt === 0) return;
+    const controller = new AbortController();
+    searchRequest.current = controller;
+    const timer = setTimeout(async () => {
+      setSearch({ status: "loading", offers: [] });
+      try {
+        const offers = await searchOffers(query, controller.signal);
+        if (!controller.signal.aborted) setSearch({ status: "ready", offers });
+      } catch {
+        if (!controller.signal.aborted)
+          setSearch({ status: "error", offers: [] });
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, searchAttempt]);
   useEffect(
     () => () => {
       searchRequest.current?.abort();
@@ -44,20 +67,6 @@ export function StreamOfferEditor({
     },
     [],
   );
-
-  async function runSearch() {
-    searchRequest.current?.abort();
-    const controller = new AbortController();
-    searchRequest.current = controller;
-    setSearch({ status: "loading", offers: [] });
-    try {
-      const offers = await searchOffers(query, controller.signal);
-      if (!controller.signal.aborted) setSearch({ status: "ready", offers });
-    } catch {
-      if (!controller.signal.aborted)
-        setSearch({ status: "error", offers: [] });
-    }
-  }
 
   async function stageOffer(id: number) {
     lookupRequest.current?.abort();
@@ -99,7 +108,7 @@ export function StreamOfferEditor({
         className="mt-4 flex flex-wrap items-end gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          void runSearch();
+          setSearchAttempt((current) => current + 1);
         }}
       >
         <label
@@ -113,6 +122,7 @@ export function StreamOfferEditor({
             onChange={(event) => {
               searchRequest.current?.abort();
               setQuery(event.target.value);
+              setSearchAttempt(0);
               setSearch({ status: "idle", offers: [] });
             }}
             className="mt-1 block w-full rounded-lg border bg-background px-3 py-2"
@@ -197,6 +207,12 @@ export function StreamOfferEditor({
           {visible.map((offer) => {
             const status = membershipStatus(draft, offer.id);
             const label = status.charAt(0).toUpperCase() + status.slice(1);
+            const previous = draft.baseline.find(
+              (item) => item.id === offer.id,
+            );
+            const shareChanged =
+              offer.attached &&
+              (!previous?.attached || previous.share !== offer.share);
             return (
               <li
                 key={offer.id}
@@ -229,10 +245,16 @@ export function StreamOfferEditor({
                   )}
                 </div>
                 <div className="space-y-2 text-sm">
+                  {(shareChanged || status === "pending removal") && (
+                    <p className="text-muted-foreground">
+                      Current traffic: {previous?.attached ? previous.share : 0}
+                      %
+                    </p>
+                  )}
                   {offer.attached ? (
                     <>
                       <p>
-                        Traffic share:{" "}
+                        {shareChanged ? "Proposed traffic" : "Traffic share"}:{" "}
                         <span className="font-semibold">{offer.share}%</span>
                         {offer.pinned && " · Pinned"}
                       </p>
@@ -262,6 +284,9 @@ export function StreamOfferEditor({
                     </>
                   ) : (
                     <>
+                      {status === "pending removal" && (
+                        <p>Proposed traffic: 0%</p>
+                      )}
                       <p className="text-muted-foreground">
                         No traffic allocated
                       </p>
