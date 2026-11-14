@@ -58,13 +58,10 @@ export function CampaignList() {
             Your existing advertising campaigns, in one place.
           </p>
         </div>
-        <Button disabled aria-describedby="creation-note" size="lg">
+        <Link href="/campaigns/new" className={buttonVariants({ size: "lg" })}>
           <Plus aria-hidden="true" /> Create campaign
-        </Button>
+        </Link>
       </div>
-      <p id="creation-note" className="mt-6 text-sm text-muted-foreground">
-        Campaign creation is coming soon. Select a campaign to view its details.
-      </p>
       <div
         className="mt-6 overflow-hidden rounded-xl border bg-background"
         aria-busy={loading}
@@ -112,13 +109,12 @@ export function CampaignList() {
                 : "The campaign list may have changed. Go back to the previous page."}
             </p>
             {offset === 0 && (
-              <Button
-                disabled
-                aria-describedby="creation-note"
-                className="mt-5"
+              <Link
+                href="/campaigns/new"
+                className={buttonVariants({ className: "mt-5" })}
               >
                 <Plus aria-hidden="true" /> Create campaign
-              </Button>
+              </Link>
             )}
           </div>
         )}

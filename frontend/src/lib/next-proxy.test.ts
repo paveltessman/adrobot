@@ -7,6 +7,9 @@ test("offer search and lookup have backend proxy routes", async () => {
   const rewrites = await config.rewrites!();
   assert.ok(Array.isArray(rewrites));
   for (const path of [
+    "domains",
+    "campaign-groups",
+    "traffic-sources",
     "offers",
     "offers/:id",
     "campaigns",
