@@ -18,11 +18,16 @@ from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.database import Database
+from adrobot.storage.memberships import Membership
+from adrobot.storage.memberships import MembershipRepository
+from adrobot.storage.memberships import MembershipScope
 
 
 @dataclass
 class ServiceCase:
     service: KeitaroService
+    database: Database
     campaigns: AsyncMock
     configuration: AsyncMock
     streams: AsyncMock
@@ -33,8 +38,11 @@ class ServiceCase:
 async def case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[ServiceCase]:
     requester = AsyncHttpRequester("https://example.com/admin_api/v1/")
     client = KeitaroApiClient(requester)
+    database = Database("sqlite+aiosqlite:///:memory:")
+    await database.initialize()
     mocks = ServiceCase(
-        service=KeitaroService(client),
+        service=KeitaroService(client, database, "https://example.com/admin_api/v1/"),
+        database=database,
         campaigns=AsyncMock(return_value=[]),
         configuration=AsyncMock(
             return_value=CampaignConfiguration(
@@ -60,6 +68,7 @@ async def case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[ServiceCase]:
         yield mocks
     finally:
         await requester.close()
+        await database.close()
 
 
 def stream(identifier: int, offers: list[StreamOffer]) -> Stream:
@@ -164,6 +173,13 @@ async def test_missing_campaign_is_translated_and_stops_loading(
 async def test_upstream_errors_propagate_without_partial_results(
     case: ServiceCase, stage: str, failure: str
 ) -> None:
+    case.streams.return_value = [
+        stream(2, [StreamOffer(offer_id=9, share=100, state="active")])
+    ]
+    await case.service.get_campaign_details(7)
+    before = await history(case, 2)
+    for mock in (case.campaigns, case.configuration, case.streams, case.offer):
+        mock.reset_mock()
     errors = {
         "http": HttpStatusError(HttpResponse(401, "Unauthorized", "private")),
         "network": NetworkError("Transport failure"),
@@ -181,6 +197,7 @@ async def test_upstream_errors_propagate_without_partial_results(
         else:
             await case.service.get_campaign_details(7)
     assert error.value is original
+    assert await history(case, 2) == before
     if stage == "configuration":
         case.streams.assert_not_awaited()
     if stage != "offer":
@@ -200,3 +217,81 @@ async def test_missing_related_resource_is_not_a_missing_campaign(
     with pytest.raises(HttpStatusError) as error:
         await case.service.get_campaign_details(7)
     assert error.value is original
+
+
+async def history(case: ServiceCase, stream_id: int) -> list[Membership]:
+    async with case.database.transaction() as session:
+        return await MembershipRepository(session).list(
+            MembershipScope("https://example.com/admin_api/v1/", 7, stream_id)
+        )
+
+
+async def test_refresh_tracks_removal_renaming_and_reattachment(
+    case: ServiceCase,
+) -> None:
+    membership = StreamOffer(offer_id=9, share=100, state="disabled")
+    case.streams.return_value = [stream(2, [membership]), stream(3, [membership])]
+    await case.service.get_campaign_details(7)
+    await case.service.get_campaign_details(7)
+    assert await history(case, 2) == [Membership(9, "Offer", "active", True)]
+
+    case.streams.return_value = [stream(2, []), stream(3, [membership])]
+    case.offer.return_value = Offer(id=9, name="Renamed", state="disabled")
+    result = await case.service.get_campaign_details(7)
+    assert result.streams[0].offer_details == []
+    assert await history(case, 2) == [Membership(9, "Offer", "active", False)]
+    assert await history(case, 3) == [Membership(9, "Renamed", "disabled", True)]
+
+    case.streams.return_value = [stream(2, [membership]), stream(3, [])]
+    await case.service.get_campaign_details(7)
+    assert await history(case, 2) == [Membership(9, "Renamed", "disabled", True)]
+    assert await history(case, 3) == [Membership(9, "Renamed", "disabled", False)]
+
+
+async def test_later_offer_failure_does_not_persist_partial_observations(
+    case: ServiceCase,
+) -> None:
+    original = StreamOffer(offer_id=9, share=100, state="active")
+    case.streams.return_value = [stream(2, [original]), stream(3, [original])]
+    await case.service.get_campaign_details(7)
+    case.streams.return_value = [
+        stream(2, []),
+        stream(3, [original, StreamOffer(offer_id=10, share=0, state="active")]),
+    ]
+    case.offer.side_effect = [
+        Offer(id=9, name="Unconfirmed rename", state="active"),
+        NetworkError("incomplete"),
+    ]
+    with pytest.raises(NetworkError, match="incomplete"):
+        await case.service.get_campaign_details(7)
+    for stream_id in (2, 3):
+        assert await history(case, stream_id) == [
+            Membership(9, "Offer", "active", True)
+        ]
+
+
+async def test_history_transaction_rolls_back_all_streams_on_storage_failure(
+    case: ServiceCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    membership = StreamOffer(offer_id=9, share=100, state="active")
+    case.streams.return_value = [stream(2, [membership]), stream(3, [membership])]
+    await case.service.get_campaign_details(7)
+    case.streams.return_value = [stream(2, []), stream(3, [])]
+    save = MembershipRepository.save
+
+    async def failing_save(
+        repository: MembershipRepository,
+        scope: MembershipScope,
+        membership: Membership,
+    ) -> None:
+        if scope.stream_id == 3:
+            raise RuntimeError("storage failure")
+        await save(repository, scope, membership)
+
+    monkeypatch.setattr(MembershipRepository, "save", failing_save)
+    with pytest.raises(RuntimeError, match="storage failure"):
+        await case.service.get_campaign_details(7)
+    for stream_id in (2, 3):
+        assert await history(case, stream_id) == [
+            Membership(9, "Offer", "active", True)
+        ]
