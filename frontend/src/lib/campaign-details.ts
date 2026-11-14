@@ -17,6 +17,7 @@ export interface CampaignStream {
   filters: Record<string, unknown>[];
   offers: StreamOffer[];
   offer_details: { id: number; name: string; state: string }[];
+  removed_offers: { id: number; name: string; last_known_state: string }[];
 }
 
 export interface CampaignDetails {
@@ -44,6 +45,7 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
   if (!record(value)) return false;
   const memberships = value.offers;
   const details = value.offer_details;
+  const removed = value.removed_offers;
   return (
     id(value.id) &&
     value.campaign_id === campaignId &&
@@ -77,6 +79,18 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
     details.length === memberships.length &&
     memberships.every((item) =>
       details.some((detail) => detail.id === item.offer_id),
+    ) &&
+    Array.isArray(removed) &&
+    removed.every(
+      (item: unknown) =>
+        record(item) &&
+        id(item.id) &&
+        typeof item.name === "string" &&
+        typeof item.last_known_state === "string",
+    ) &&
+    new Set(removed.map((item) => item.id)).size === removed.length &&
+    removed.every((item) =>
+      memberships.every((membership) => membership.offer_id !== item.id),
     )
   );
 }

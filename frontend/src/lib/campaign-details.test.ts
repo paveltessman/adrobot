@@ -29,6 +29,9 @@ const campaign = {
       filters: [],
       offers: [{ offer_id: 9, share: 100, state: "active" }],
       offer_details: [{ id: 9, name: "Offer", state: "active" }],
+      removed_offers: [
+        { id: 10, name: "Old offer", last_known_state: "active" },
+      ],
     },
   ],
 };
@@ -77,6 +80,22 @@ for (const data of [
   { ...campaign, streams: [{ ...campaign.streams[0], campaign_id: 8 }] },
   { ...campaign, streams: [{ ...campaign.streams[0], offers: null }] },
   { ...campaign, streams: [{ ...campaign.streams[0], offer_details: [] }] },
+  ...[
+    undefined,
+    null,
+    {},
+    [{ id: 0, name: "Old", last_known_state: "active" }],
+    [{ id: 10, name: 1, last_known_state: "active" }],
+    [{ id: 10, name: "Old", last_known_state: null }],
+    [{ id: 9, name: "Attached", last_known_state: "active" }],
+    [
+      campaign.streams[0].removed_offers[0],
+      campaign.streams[0].removed_offers[0],
+    ],
+  ].map((removed_offers) => ({
+    ...campaign,
+    streams: [{ ...campaign.streams[0], removed_offers }],
+  })),
   {
     ...campaign,
     streams: [

@@ -31,7 +31,13 @@ function Fields({ values }: { values: [string, string | number | null][] }) {
   );
 }
 
-function StreamView({ stream }: { stream: CampaignStream }) {
+function StreamView({
+  stream,
+  showRemoved,
+}: {
+  stream: CampaignStream;
+  showRemoved: boolean;
+}) {
   return (
     <section
       aria-labelledby={`stream-${stream.id}`}
@@ -75,7 +81,8 @@ function StreamView({ stream }: { stream: CampaignStream }) {
         </details>
       )}
       <h4 className="mt-7 font-medium">Offers</h4>
-      {stream.offers.length === 0 ? (
+      {stream.offers.length === 0 &&
+      (!showRemoved || stream.removed_offers.length === 0) ? (
         <p className="mt-3 text-sm text-muted-foreground">
           No offers attached to this stream.
         </p>
@@ -111,6 +118,29 @@ function StreamView({ stream }: { stream: CampaignStream }) {
               </li>
             );
           })}
+          {showRemoved &&
+            stream.removed_offers.map((offer) => (
+              <li
+                key={offer.id}
+                className="flex flex-wrap items-start justify-between gap-3 py-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium [overflow-wrap:anywhere]">
+                    {offer.name || "Unnamed offer"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Offer ID: {offer.id} · Removed
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Last known offer status: {offer.last_known_state}. Current
+                    availability has not been checked.
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  No traffic allocated
+                </p>
+              </li>
+            ))}
         </ul>
       )}
     </section>
@@ -120,6 +150,7 @@ function StreamView({ stream }: { stream: CampaignStream }) {
 export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
   const validId = Number.isSafeInteger(campaignId) && campaignId > 0;
   const [attempt, setAttempt] = useState(0);
+  const [showRemoved, setShowRemoved] = useState(false);
   const [state, setState] = useState<LoadState>({ status: "loading" });
   useEffect(() => {
     if (!validId) return;
@@ -217,6 +248,15 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
               <h2 id="streams-title" className="text-2xl font-semibold">
                 Streams
               </h2>
+              <label className="mt-4 flex w-fit cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showRemoved}
+                  onChange={(event) => setShowRemoved(event.target.checked)}
+                  className="size-4 accent-emerald-700"
+                />
+                Show removed
+              </label>
               {state.campaign.streams.length === 0 ? (
                 <p className="mt-4 text-muted-foreground">
                   No streams in this campaign.
@@ -224,7 +264,11 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
               ) : (
                 <div className="mt-5 space-y-5">
                   {state.campaign.streams.map((stream) => (
-                    <StreamView key={stream.id} stream={stream} />
+                    <StreamView
+                      key={stream.id}
+                      stream={stream}
+                      showRemoved={showRemoved}
+                    />
                   ))}
                 </div>
               )}
