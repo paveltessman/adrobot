@@ -12,3 +12,7 @@ class CampaignNotFoundError(KeitaroApiError):
 
 class OfferNotFoundError(KeitaroApiError):
     """The requested offer does not exist or is inaccessible in Keitaro."""
+
+
+class InvalidCampaignPush(AdRobotException):
+    """The proposed campaign changes cannot be applied."""

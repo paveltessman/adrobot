@@ -11,11 +11,28 @@ from pydantic import BaseModel
 from adrobot.httpserver.dependencies import get_keitaro_service
 from adrobot.httpserver.schemas import SuccessResponse
 from adrobot.services.keitaro.exceptions import CampaignNotFoundError
+from adrobot.services.keitaro.exceptions import InvalidCampaignPush
 from adrobot.services.keitaro.models import Campaign
 from adrobot.services.keitaro.models import CampaignDetails
+from adrobot.services.keitaro.push_models import CampaignPushRequest
+from adrobot.services.keitaro.push_models import CampaignPushResult
 from adrobot.services.keitaro.service import KeitaroService
 
 router = APIRouter(tags=["Keitaro"])
+
+
+@router.post("/{campaign_id}/push")
+async def push_campaign(
+    campaign_id: Annotated[int, Path(ge=1)],
+    proposed: CampaignPushRequest,
+    service: Annotated[KeitaroService, Depends(get_keitaro_service)],
+) -> SuccessResponse[CampaignPushResult]:
+    try:
+        return SuccessResponse(data=await service.push_campaign(campaign_id, proposed))
+    except CampaignNotFoundError as exc:
+        raise HTTPException(404, "Campaign not found") from exc
+    except InvalidCampaignPush as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 class CampaignPage(BaseModel):

@@ -220,3 +220,73 @@ async def test_offer_catalog_rejects_invalid_responses(body: str) -> None:
         async with AsyncHttpRequester(base_url) as requester:
             with pytest.raises(KeitaroApiError):
                 await KeitaroApiClient(requester).get_offers()
+
+
+async def test_stream_update_sends_only_complete_offer_list() -> None:
+    from .models import Stream
+    from .models import StreamOffer
+    from .push_models import ProposedOffer
+
+    members = [
+        ProposedOffer(offer_id=9, share=100, state="disabled"),
+        ProposedOffer(offer_id=10, share=0, state="active"),
+    ]
+    updated = Stream(
+        id=2,
+        campaign_id=7,
+        name="Offers",
+        type="regular",
+        state="active",
+        position=1,
+        schema="landings",
+        action_type="http",
+        action_payload={},
+        filters=[],
+        offers=[StreamOffer(**item.model_dump()) for item in members],
+    )
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.path == "/admin_api/v1/streams/2"
+        assert request.method == "PUT"
+        assert request.headers["Api-Key"] == "test-key"
+        assert not request.query
+        assert await request.json() == {
+            "offers": [item.model_dump() for item in members]
+        }
+        return web.json_response(updated.model_dump(by_alias=True))
+
+    async with api_server(handler) as base_url:
+        async with create_keitaro_http_requester(base_url, "test-key") as requester:
+            client = KeitaroApiClient(requester)
+            await client.update_stream_offers(2, members)
+            with pytest.raises(ValueError):
+                await client.update_stream_offers(0, members)
+
+
+@pytest.mark.parametrize("status", [400, 404, 422, 429, 500, 503])
+async def test_stream_writes_are_not_automatically_retried(status: int) -> None:
+    calls = 0
+
+    async def handler(request: web.Request) -> web.Response:
+        nonlocal calls
+        assert request.method == "PUT"
+        calls += 1
+        return web.Response(status=status, text="private upstream details")
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            with pytest.raises(HttpStatusError):
+                await KeitaroApiClient(requester).update_stream_offers(2, [])
+    assert calls == 1
+
+
+@pytest.mark.parametrize("body", ["invalid", "{}", '{"id":3}'])
+async def test_invalid_stream_write_response_is_uncertain(body: str) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        assert request.method == "PUT"
+        return web.Response(text=body)
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            with pytest.raises(KeitaroApiError):
+                await KeitaroApiClient(requester).update_stream_offers(2, [])
