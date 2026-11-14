@@ -17,6 +17,7 @@ from adrobot.storage.database import Database
 from adrobot.storage.memberships import Membership
 from adrobot.storage.memberships import MembershipRepository
 from adrobot.storage.memberships import MembershipScope
+from adrobot.storage.memberships import PinRepository
 
 
 class KeitaroService:
@@ -76,9 +77,13 @@ class KeitaroService:
     async def _record_history(self, details: CampaignDetails) -> None:
         async with self._database.transaction() as session:
             repository = MembershipRepository(session)
+            pins = PinRepository(session)
             for stream in details.streams:
                 scope = MembershipScope(self._instance, details.id, stream.id)
                 current_ids = {item.offer_id for item in stream.offers}
+                stream.pinned_offer_ids = await self._reconcile_pins(
+                    pins, scope, current_ids
+                )
                 history = await repository.list(scope)
                 stream.removed_offers = [
                     RemovedOffer(
@@ -96,6 +101,16 @@ class KeitaroService:
                     await repository.save(
                         scope, Membership(offer.id, offer.name, offer.state, True)
                     )
+
+    @staticmethod
+    async def _reconcile_pins(
+        pins: PinRepository, scope: MembershipScope, current_ids: set[int]
+    ) -> list[int]:
+        committed_ids = await pins.list(scope)
+        retained = [offer_id for offer_id in committed_ids if offer_id in current_ids]
+        if retained != committed_ids:
+            await pins.replace(scope, set(retained))
+        return retained
 
     async def _get_campaign_configuration(
         self,

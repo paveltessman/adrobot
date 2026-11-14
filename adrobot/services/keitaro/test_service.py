@@ -23,6 +23,7 @@ from adrobot.storage.database import Database
 from adrobot.storage.memberships import Membership
 from adrobot.storage.memberships import MembershipRepository
 from adrobot.storage.memberships import MembershipScope
+from adrobot.storage.memberships import PinRepository
 
 
 @dataclass
@@ -125,6 +126,7 @@ async def test_details_preserve_configuration_and_empty_streams(
                 **stream(1, []).model_dump(by_alias=True),
                 "offer_details": [],
                 "removed_offers": [],
+                "pinned_offer_ids": [],
             }
         ]
     )
@@ -355,3 +357,32 @@ async def test_history_transaction_rolls_back_all_streams_on_storage_failure(
         assert await history(case, stream_id) == [
             Membership(9, "Offer", "active", True)
         ]
+
+
+async def test_refresh_loads_pins_and_removal_permanently_releases_them(
+    case: ServiceCase,
+) -> None:
+    scope = MembershipScope("https://example.com/admin_api/v1/", 7, 1)
+    membership = StreamOffer(offer_id=9, share=100, state="active")
+    case.streams.return_value = [stream(1, [membership]), stream(2, [membership])]
+    async with case.database.transaction() as session:
+        await PinRepository(session).replace(scope, {9})
+    result = await case.service.get_campaign_details(7)
+    assert result.streams[0].pinned_offer_ids == [9]
+    assert result.streams[1].pinned_offer_ids == []
+
+    case.streams.return_value = [stream(1, []), stream(2, [membership])]
+    case.offer.side_effect = NetworkError("unavailable")
+    with pytest.raises(NetworkError):
+        await case.service.get_campaign_details(7)
+    async with case.database.transaction() as session:
+        assert await PinRepository(session).list(scope) == [9]
+    case.offer.side_effect = None
+    case.streams.return_value = [stream(1, [])]
+    result = await case.service.get_campaign_details(7)
+    assert result.streams[0].pinned_offer_ids == []
+    async with case.database.transaction() as session:
+        assert await PinRepository(session).list(scope) == []
+    case.streams.return_value = [stream(1, [membership])]
+    result = await case.service.get_campaign_details(7)
+    assert result.streams[0].pinned_offer_ids == []

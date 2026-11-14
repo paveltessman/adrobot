@@ -396,6 +396,7 @@ async def test_campaign_details(
                         "updated_at": None,
                         "offer_details": [] if empty or index == 0 else [offer],
                         "removed_offers": [],
+                        "pinned_offer_ids": [],
                     }
                     for index, stream in enumerate(streams)
                 ],

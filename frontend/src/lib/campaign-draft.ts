@@ -22,7 +22,7 @@ export type MembershipStatus =
 
 export function createStreamDraft(
   stream: CampaignStream,
-  pinnedIds: readonly number[] = [],
+  pinnedIds: readonly number[] = stream.pinned_offer_ids,
 ): StreamDraft {
   const offers: DraftOffer[] = stream.offers.map((membership) => {
     const detail = stream.offer_details.find(

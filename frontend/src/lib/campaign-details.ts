@@ -18,6 +18,7 @@ export interface CampaignStream {
   offers: StreamOffer[];
   offer_details: { id: number; name: string; state: string }[];
   removed_offers: { id: number; name: string; last_known_state: string }[];
+  pinned_offer_ids: number[];
 }
 
 export interface CampaignDetails {
@@ -46,6 +47,7 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
   const memberships = value.offers;
   const details = value.offer_details;
   const removed = value.removed_offers;
+  const pins = value.pinned_offer_ids;
   return (
     id(value.id) &&
     value.campaign_id === campaignId &&
@@ -60,6 +62,14 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
     Array.isArray(value.filters) &&
     value.filters.every(record) &&
     Array.isArray(memberships) &&
+    Array.isArray(pins) &&
+    pins.every((pin: unknown) => id(pin)) &&
+    new Set(pins).size === pins.length &&
+    pins.every((pin) =>
+      memberships.some(
+        (item: unknown) => record(item) && item.offer_id === pin,
+      ),
+    ) &&
     memberships.every(
       (item: unknown) =>
         record(item) &&
