@@ -51,8 +51,15 @@ class Stream(_Base):
     updated_at: str | None = None
 
 
+class RemovedOffer(_Base):
+    id: int
+    name: str
+    last_known_state: str
+
+
 class CampaignStream(Stream):
     offer_details: list[Offer]
+    removed_offers: list[RemovedOffer]
 
 
 class CampaignDetails(CampaignConfiguration):

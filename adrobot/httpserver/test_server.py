@@ -392,6 +392,7 @@ async def test_campaign_details(settings: Settings, empty: bool) -> None:
                         **stream,
                         "updated_at": None,
                         "offer_details": [] if empty or index == 0 else [offer],
+                        "removed_offers": [],
                     }
                     for index, stream in enumerate(streams)
                 ],
@@ -402,6 +403,60 @@ async def test_campaign_details(settings: Settings, empty: bool) -> None:
         "/admin_api/v1/campaigns/7",
         "/admin_api/v1/campaigns/7/streams",
     ] + ([] if empty else ["/admin_api/v1/offers/9"])
+
+
+async def test_campaign_details_exposes_removed_history(settings: Settings) -> None:
+    attached = True
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.method == "GET"
+        if request.path.endswith("/streams"):
+            return web.json_response(
+                [
+                    {
+                        "id": 2,
+                        "campaign_id": 7,
+                        "name": "Offers",
+                        "type": "regular",
+                        "state": "active",
+                        "position": 1,
+                        "schema": "landings",
+                        "action_type": "http",
+                        "action_payload": "",
+                        "filters": [],
+                        "offers": (
+                            [{"offer_id": 9, "share": 100, "state": "active"}]
+                            if attached
+                            else []
+                        ),
+                    }
+                ]
+            )
+        if request.path.endswith("/offers/9"):
+            assert attached
+            return web.json_response({"id": 9, "name": "Old name", "state": "active"})
+        return web.json_response({"id": 7, "name": "Example"})
+
+    async with campaigns_client(settings, handler) as client:
+        response = await client.get(f"{_CAMPAIGNS_PATH}/7")
+        assert response.status == 200
+        assert (await response.json())["data"]["streams"][0]["removed_offers"] == []
+        attached = False
+        for _ in range(2):
+            response = await client.get(f"{_CAMPAIGNS_PATH}/7")
+            assert response.status == 200
+            result = (await response.json())["data"]["streams"][0]
+            assert result["offers"] == []
+            assert result["offer_details"] == []
+            assert result["removed_offers"] == [
+                {"id": 9, "name": "Old name", "last_known_state": "active"}
+            ]
+        attached = True
+        response = await client.get(f"{_CAMPAIGNS_PATH}/7")
+        assert response.status == 200
+        result = (await response.json())["data"]["streams"][0]
+        assert result["removed_offers"] == []
+        assert len(result["offers"]) == 1
 
 
 @pytest.mark.parametrize("campaign_id", ["0", "-1", "invalid", "1.5"])
