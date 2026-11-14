@@ -12,6 +12,7 @@ import {
   CreationRejectedError,
   CreationUnknownError,
   getCreationSelectors,
+  parseCountryCodes,
   type CreationDraft,
   type CreationOption,
   type CreationSelectors,
@@ -20,7 +21,7 @@ import { useDraftNavigation } from "@/lib/use-draft-navigation";
 
 const emptyDraft: CreationDraft = {
   name: "",
-  countryCode: "",
+  countryCodes: "",
   offer: null,
   domainId: "",
   groupId: "",
@@ -56,13 +57,8 @@ function Selector({
         className={inputClass}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        required
       >
-        <option value="">
-          {options.length
-            ? `Select ${label.toLowerCase()}`
-            : `No ${label.toLowerCase()} options available`}
-        </option>
+        <option value="">None</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.name || "Unnamed"} (ID: {option.id})
@@ -84,7 +80,7 @@ function Preview({
     const selected = options?.find((item) => String(item.id) === value);
     return selected
       ? `${selected.name || "Unnamed"} (ID: ${selected.id})`
-      : "Not selected";
+      : "None";
   }
   return (
     <section
@@ -118,8 +114,9 @@ function Preview({
           <h3 className="font-semibold">1. Country redirect</h3>
           <p className="mt-2">
             Traffic from{" "}
-            {draft.countryCode.trim().toUpperCase() || "the selected country"} →
-            Google
+            {parseCountryCodes(draft.countryCodes).join(", ") ||
+              "the selected countries"}{" "}
+            → Google
           </p>
           <p className="mt-1 break-all text-muted-foreground">
             https://www.google.com
@@ -170,11 +167,6 @@ export function CampaignCreateForm() {
   );
   const validation = creationError(draft);
   const selectors = options.status === "ready" ? options.values : undefined;
-  const missingOptions =
-    selectors &&
-    (!selectors.domains.length ||
-      !selectors.groups.length ||
-      !selectors.sources.length);
 
   useEffect(() => {
     mounted.current = true;
@@ -204,14 +196,7 @@ export function CampaignCreateForm() {
     setSubmission({ status: "idle" });
   }
   async function push() {
-    if (
-      operation.current ||
-      locked ||
-      validation ||
-      !selectors ||
-      missingOptions
-    )
-      return;
+    if (operation.current || locked || validation) return;
     operation.current = true;
     setSubmission({ status: "submitting" });
     try {
@@ -292,26 +277,24 @@ export function CampaignCreateForm() {
               />
             </label>
             <div className="text-sm font-medium">
-              <label htmlFor="creation-country">Country code</label>
+              <label htmlFor="creation-country">Country codes</label>
               <input
                 id="creation-country"
                 className={`${inputClass} uppercase`}
-                value={draft.countryCode}
+                value={draft.countryCodes}
                 required
-                maxLength={2}
-                pattern="[A-Za-z]{2}"
-                placeholder="AU"
+                placeholder="AU, US"
                 aria-describedby="country-help"
                 onChange={(event) =>
-                  update("countryCode", event.target.value.toUpperCase())
+                  update("countryCodes", event.target.value.toUpperCase())
                 }
               />
               <span
                 id="country-help"
                 className="mt-2 block font-normal text-muted-foreground"
               >
-                Two-letter country code. Traffic from this country goes to
-                Google.
+                Enter two-letter codes separated by commas or spaces, such as
+                AU, US. Traffic from any selected country goes to Google.
               </span>
             </div>
             <CreationOfferPicker
@@ -327,7 +310,8 @@ export function CampaignCreateForm() {
             {options.status === "error" && (
               <div>
                 <p role="alert" className="text-sm">
-                  Could not load campaign options.
+                  Could not load campaign options. You can leave these optional
+                  settings as None and create the campaign.
                 </p>
                 <Button
                   type="button"
@@ -342,34 +326,29 @@ export function CampaignCreateForm() {
                 </Button>
               </div>
             )}
-            {selectors && (
-              <div className="space-y-4">
-                <Selector
-                  label="Domain"
-                  value={draft.domainId}
-                  options={selectors.domains}
-                  onChange={(value) => update("domainId", value)}
-                />
-                <Selector
-                  label="Campaign group"
-                  value={draft.groupId}
-                  options={selectors.groups}
-                  onChange={(value) => update("groupId", value)}
-                />
-                <Selector
-                  label="Traffic source"
-                  value={draft.sourceId}
-                  options={selectors.sources}
-                  onChange={(value) => update("sourceId", value)}
-                />
-                {missingOptions && (
-                  <p role="alert" className="text-sm">
-                    A domain, campaign group, and traffic source must be
-                    available in Keitaro before you can create a campaign.
-                  </p>
-                )}
-              </div>
-            )}
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Domain, campaign group, and traffic source are optional.
+              </p>
+              <Selector
+                label="Domain"
+                value={draft.domainId}
+                options={selectors?.domains ?? []}
+                onChange={(value) => update("domainId", value)}
+              />
+              <Selector
+                label="Campaign group"
+                value={draft.groupId}
+                options={selectors?.groups ?? []}
+                onChange={(value) => update("groupId", value)}
+              />
+              <Selector
+                label="Traffic source"
+                value={draft.sourceId}
+                options={selectors?.sources ?? []}
+                onChange={(value) => update("sourceId", value)}
+              />
+            </div>
           </fieldset>
           <Preview draft={draft} selectors={selectors} />
         </div>
@@ -447,12 +426,7 @@ export function CampaignCreateForm() {
             </div>
           )}
           <div className="flex flex-wrap gap-3">
-            <Button
-              type="submit"
-              disabled={
-                locked || !!validation || !selectors || !!missingOptions
-              }
-            >
+            <Button type="submit" disabled={locked || !!validation}>
               Push
             </Button>
             <Button

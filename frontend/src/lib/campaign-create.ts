@@ -14,7 +14,7 @@ export interface CreationSelectors {
 
 export interface CreationDraft {
   name: string;
-  countryCode: string;
+  countryCodes: string;
   offer: Offer | null;
   domainId: string;
   groupId: string;
@@ -23,11 +23,11 @@ export interface CreationDraft {
 
 export interface CreationRequest {
   name: string;
-  country_code: string;
+  country_codes: string[];
   offer_id: number;
-  domain_id: number;
-  group_id: number;
-  traffic_source_id: number;
+  domain_id: number | null;
+  group_id: number | null;
+  traffic_source_id: number | null;
 }
 
 export type CreationResult =
@@ -57,28 +57,47 @@ export function availableOffer(offer: Offer): boolean {
   return ["active", "disabled"].includes(offer.state);
 }
 
+export function parseCountryCodes(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .trim()
+        .toUpperCase()
+        .split(/[,\s]+/)
+        .filter(Boolean),
+    ),
+  ].sort();
+}
+
+function optionalId(value: string): number | null {
+  if (value === "") return null;
+  if (!/^[1-9]\d*$/.test(value) || !id(Number(value)))
+    throw new RangeError(
+      "Select a valid domain, campaign group, or traffic source, or choose None.",
+    );
+  return Number(value);
+}
+
 export function creationRequest(draft: CreationDraft): CreationRequest {
   const name = draft.name.trim();
-  const country = draft.countryCode.trim().toUpperCase();
+  const countries = parseCountryCodes(draft.countryCodes);
   if (!name) throw new RangeError("Enter a campaign name.");
-  if (!/^[A-Z]{2}$/.test(country))
-    throw new RangeError("Enter a two-letter country code, such as AU.");
-  if (!draft.offer || !id(draft.offer.id) || !availableOffer(draft.offer))
-    throw new RangeError("Select an available offer.");
-  const selectors = [draft.domainId, draft.groupId, draft.sourceId];
   if (
-    selectors.some((value) => !/^[1-9]\d*$/.test(value) || !id(Number(value)))
+    !countries.length ||
+    countries.some((country) => !/^[A-Z]{2}$/.test(country))
   )
     throw new RangeError(
-      "Select a domain, campaign group, and traffic source.",
+      "Enter two-letter country codes separated by commas or spaces, such as AU, US.",
     );
+  if (!draft.offer || !id(draft.offer.id) || !availableOffer(draft.offer))
+    throw new RangeError("Select an available offer.");
   return {
     name,
-    country_code: country,
+    country_codes: countries,
     offer_id: draft.offer.id,
-    domain_id: Number(draft.domainId),
-    group_id: Number(draft.groupId),
-    traffic_source_id: Number(draft.sourceId),
+    domain_id: optionalId(draft.domainId),
+    group_id: optionalId(draft.groupId),
+    traffic_source_id: optionalId(draft.sourceId),
   };
 }
 

@@ -12,7 +12,7 @@ import {
 
 const draft: CreationDraft = {
   name: " Summer ",
-  countryCode: "au",
+  countryCodes: "au",
   offer: { id: 9, name: "Offer", state: "active" },
   domainId: "2",
   groupId: "3",
@@ -36,7 +36,7 @@ afterEach(() => mock.restoreAll());
 test("normalizes creation inputs and sends only the required fields", () => {
   assert.deepEqual(creationRequest(draft), {
     name: "Summer",
-    country_code: "AU",
+    country_codes: ["AU"],
     offer_id: 9,
     domain_id: 2,
     group_id: 3,
@@ -47,14 +47,14 @@ test("normalizes creation inputs and sends only the required fields", () => {
 
 for (const update of [
   { name: " " },
-  { countryCode: "A" },
-  { countryCode: "123" },
+  { countryCodes: "A" },
+  { countryCodes: "123" },
   { offer: null },
   { offer: { id: 9, name: "Archived", state: "deleted" } },
   { offer: { id: 0, name: "Invalid", state: "active" } },
   { domainId: "0" },
   { groupId: "3.5" },
-  { sourceId: "" },
+  { sourceId: "-4" },
   { domainId: "9007199254740992" },
 ]) {
   test(`invalid draft never writes: ${JSON.stringify(update)}`, async () => {
@@ -238,3 +238,59 @@ test("network loss, non-JSON, and error envelopes are uncertain", async () => {
     mock.restoreAll();
   }
 });
+
+for (const countries of ["us, au AU", " AU\tUS\nau ", "au,us", ", au,, US,"]) {
+  test(`normalizes several countries: ${JSON.stringify(countries)}`, () => {
+    assert.deepEqual(
+      creationRequest({ ...draft, countryCodes: countries }).country_codes,
+      ["AU", "US"],
+    );
+  });
+}
+
+for (const countries of [
+  "",
+  " , \t",
+  "AU USA",
+  "AU;US",
+  "AU, 12",
+  "AU, U",
+  "AU, 日本",
+]) {
+  test(`rejects an empty or invalid country list: ${JSON.stringify(countries)}`, async () => {
+    const fetchMock = mock.method(globalThis, "fetch");
+    await assert.rejects(
+      createCampaign({ ...draft, countryCodes: countries }),
+      RangeError,
+    );
+    assert.equal(fetchMock.mock.callCount(), 0);
+  });
+}
+
+for (const mask of [0, 1, 2, 3, 4, 5, 6, 7]) {
+  test(`serializes optional selector combination ${mask}`, async () => {
+    const values = {
+      ...draft,
+      countryCodes: "us, au au",
+      domainId: mask & 1 ? "2" : "",
+      groupId: mask & 2 ? "3" : "",
+      sourceId: mask & 4 ? "4" : "",
+    };
+    const fetchMock = mock.method(globalThis, "fetch", async () =>
+      Response.json({
+        data: { status: "unknown", campaign_id: null, campaign: null },
+        error: null,
+      }),
+    );
+    await createCampaign(values);
+    const args = fetchMock.mock.calls[0].arguments as [string, RequestInit];
+    assert.deepEqual(JSON.parse(String(args[1].body)), {
+      name: "Summer",
+      country_codes: ["AU", "US"],
+      offer_id: 9,
+      domain_id: mask & 1 ? 2 : null,
+      group_id: mask & 2 ? 3 : null,
+      traffic_source_id: mask & 4 ? 4 : null,
+    });
+  });
+}
