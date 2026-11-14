@@ -34,7 +34,7 @@ Restoring or adding a previously removed offer reuses its existing membership en
 Keep the last confirmed baseline and the proposed draft separately in frontend memory. Draft changes must not modify Keitaro or committed pin preferences before Push.
 
 - Cancel discards the draft, including draft pin changes, and returns to the last confirmed state.
-- Push sends the proposed changes and enough baseline information for the backend to detect changes made directly in Keitaro. The backend must check the affected stream before applying changes and require a refreshed preview if it has changed.
+- Push sends the proposed changes. For now, assume campaign edits are made only through this frontend and omit external-change detection: no canonical stream baseline needs to be sent or compared before writing. Keep the confirmed baseline in frontend memory for Cancel and the change summary. The backend must still validate stream ownership, selected offer availability, percentage totals, and pin constraints.
 - After a successful Push, reload confirmed state, update persisted history and committed pins, and clear the draft.
 - If Push fails, preserve the draft. If some writes succeeded, reconcile with Keitaro and show the remaining unapplied changes. Persisted history and pins must reflect the reconciled outcome rather than treating the whole draft as successful.
 
@@ -70,7 +70,7 @@ Keep drafts, pins, and observed membership history as described above. Archived-
 
 Send the complete proposed offer list when updating a stream. Keitaro's [official MCP documentation](https://docs.keitaro.io/en/settings/mcp.html) explicitly describes replacement of offer lists on stream changes; verify the same behavior for direct Admin API writes on the target version. Preserve existing membership states and avoid sending unrelated stream fields.
 
-Compare a canonical snapshot of the affected stream's membership, shares, states, and relevant routing configuration immediately before writing. Do not rely solely on timestamps. This detects already-visible external edits but cannot prevent an edit between the read and write: strict atomic conflict protection is not established by the public API. An application lock can serialize our own pushes only.
+External-change detection is deferred under the current single-writer assumption. Push does not compare the current stream against the draft's original configuration. Edits made directly in Keitaro or from another browser tab or user can therefore be overwritten by a later Push. An application lock can serialize our own pushes, but cannot detect a stale draft. If concurrent editing becomes supported, revisit baseline comparison; the public API does not establish strict atomic conflict protection.
 
 Treat Push as a sequence of remote operations with possible partial completion. A database transaction cannot roll back Keitaro writes. After success or an uncertain outcome, reload remote state and reconcile history, pins, and the remaining draft. Avoid blindly retrying campaign creation after a timeout because no idempotency guarantee is documented.
 
