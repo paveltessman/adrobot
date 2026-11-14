@@ -57,5 +57,7 @@ jobs:
         run: npm run format:check
       - name: Check TypeScript
         run: npm run typecheck
+      - name: Test frontend
+        run: npm test
       - name: Build frontend
         run: npm run build
