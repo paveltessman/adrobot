@@ -8,3 +8,7 @@ class KeitaroApiError(AdRobotException):
 
 class CampaignNotFoundError(KeitaroApiError):
     """The requested campaign does not exist in Keitaro."""
+
+
+class OfferNotFoundError(KeitaroApiError):
+    """The requested offer does not exist or is inaccessible in Keitaro."""

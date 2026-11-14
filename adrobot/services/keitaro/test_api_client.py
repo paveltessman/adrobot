@@ -196,3 +196,27 @@ async def test_details_reject_invalid_ids_before_requesting() -> None:
             for identifier in [0, -1]:
                 with pytest.raises(ValueError):
                     await resource(identifier)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "not json",
+        "null",
+        "{}",
+        '[{"id":"1","name":"Offer","state":"active"}]',
+        '[{"id":1,"name":"Offer"}]',
+        '[{"id":0,"name":"Offer","state":"active"}]',
+        '[{"id":1,"name":"A","state":"active"},'
+        '{"id":1,"name":"B","state":"active"}]',
+    ],
+)
+async def test_offer_catalog_rejects_invalid_responses(body: str) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        assert request.path.endswith("/offers")
+        return web.Response(text=body)
+
+    async with api_server(handler) as base_url:
+        async with AsyncHttpRequester(base_url) as requester:
+            with pytest.raises(KeitaroApiError):
+                await KeitaroApiClient(requester).get_offers()
