@@ -1,3 +1,10 @@
+import {
+  isRecord,
+  isPositiveId,
+  keitaroUrl,
+  readApiData,
+  isApiEnvelope,
+} from "./keitaro-api.ts";
 import type { MessageKey } from "./i18n/index.ts";
 import { LocalizedError, LocalizedRangeError } from "./i18n/errors.ts";
 import { isCampaignDetails } from "./campaign-details.ts";
@@ -47,14 +54,6 @@ export class CreationUnknownError extends Error {
   }
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function id(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
 export function availableOffer(offer: Offer): boolean {
   return ["active", "disabled"].includes(offer.state);
 }
@@ -73,7 +72,7 @@ export function parseCountryCodes(value: string): string[] {
 
 function optionalId(value: string): number | null {
   if (value === "") return null;
-  if (!/^[1-9]\d*$/.test(value) || !id(Number(value)))
+  if (!/^[1-9]\d*$/.test(value) || !isPositiveId(Number(value)))
     throw new LocalizedRangeError("validOptional");
   return Number(value);
 }
@@ -87,7 +86,11 @@ export function creationRequest(draft: CreationDraft): CreationRequest {
     countries.some((country) => !/^[A-Z]{2}$/.test(country))
   )
     throw new LocalizedRangeError("enterCountryCodes");
-  if (!draft.offer || !id(draft.offer.id) || !availableOffer(draft.offer))
+  if (
+    !draft.offer ||
+    !isPositiveId(draft.offer.id) ||
+    !availableOffer(draft.offer)
+  )
     throw new LocalizedRangeError("selectAvailableOffer");
   return {
     name,
@@ -112,19 +115,19 @@ async function loadOptions(
   path: string,
   signal?: AbortSignal,
 ): Promise<CreationOption[]> {
-  const response = await fetch(`/api/v1/integrations/keitaro/${path}`, {
+  const response = await fetch(keitaroUrl(path), {
     cache: "no-store",
     signal,
   });
   if (!response.ok) throw new Error("Could not load campaign options.");
-  const body: unknown = await response.json();
-  if (!record(body) || body.error !== null || !Array.isArray(body.data))
-    throw new Error("Invalid campaign options.");
-  const options: unknown[] = body.data;
+  const options = await readApiData(response, "Invalid campaign options.");
+  if (!Array.isArray(options)) throw new Error("Invalid campaign options.");
   if (
     !options.every(
       (option): option is CreationOption =>
-        record(option) && id(option.id) && typeof option.name === "string",
+        isRecord(option) &&
+        isPositiveId(option.id) &&
+        typeof option.name === "string",
     ) ||
     new Set(options.map((option) => option.id)).size !== options.length
   )
@@ -144,10 +147,10 @@ export async function getCreationSelectors(
 }
 
 function parseResult(body: unknown): CreationResult {
-  const data = record(body) && record(body.data) ? body.data : null;
-  const campaignId = data && id(data.campaign_id) ? data.campaign_id : null;
-  if (!record(body) || body.error !== null || !data)
-    throw new CreationUnknownError(campaignId);
+  const data = isRecord(body) && isRecord(body.data) ? body.data : null;
+  const campaignId =
+    data && isPositiveId(data.campaign_id) ? data.campaign_id : null;
+  if (!isApiEnvelope(body) || !data) throw new CreationUnknownError(campaignId);
   if (
     (data.status === "created" || data.status === "partial") &&
     campaignId &&
@@ -174,7 +177,7 @@ export async function createCampaign(
 ): Promise<CreationResult> {
   const payload = creationRequest(draft);
   try {
-    const response = await fetch("/api/v1/integrations/keitaro/campaigns", {
+    const response = await fetch(keitaroUrl("campaigns"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",

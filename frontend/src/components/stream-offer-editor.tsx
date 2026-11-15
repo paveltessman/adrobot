@@ -5,6 +5,7 @@ import { displayState, type MessageKey } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations, useLocale } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
+import { useOfferSearch } from "@/lib/use-offer-search";
 import type { CampaignStream } from "@/lib/campaign-details";
 import {
   addOffer,
@@ -13,12 +14,7 @@ import {
   setPinned,
   type StreamDraft,
 } from "@/lib/campaign-draft";
-import {
-  getOffer,
-  OfferUnavailableError,
-  searchOffers,
-  type Offer,
-} from "@/lib/offers";
+import { getOffer, OfferUnavailableError } from "@/lib/offers";
 
 export function StreamOfferEditor({
   stream,
@@ -35,11 +31,7 @@ export function StreamOfferEditor({
   const locale = useLocale();
   const container = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState<{
-    status: "idle" | "loading" | "ready" | "error";
-    offers: Offer[];
-  }>({ status: "idle", offers: [] });
+  const { query, search, changeQuery, searchNow } = useOfferSearch();
   const [pending, setPending] = useState<number | null>(null);
   const [messages, setMessages] = useState<Partial<Record<number, MessageKey>>>(
     {},
@@ -47,31 +39,9 @@ export function StreamOfferEditor({
   const [unavailable, setUnavailable] = useState<ReadonlySet<number>>(
     new Set(),
   );
-  const searchRequest = useRef<AbortController | null>(null);
   const lookupRequest = useRef<AbortController | null>(null);
-  const [searchAttempt, setSearchAttempt] = useState(0);
-  useEffect(() => {
-    if (!query.trim() && searchAttempt === 0) return;
-    const controller = new AbortController();
-    searchRequest.current = controller;
-    const timer = setTimeout(async () => {
-      setSearch({ status: "loading", offers: [] });
-      try {
-        const offers = await searchOffers(query, controller.signal);
-        if (!controller.signal.aborted) setSearch({ status: "ready", offers });
-      } catch {
-        if (!controller.signal.aborted)
-          setSearch({ status: "error", offers: [] });
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query, searchAttempt]);
   useEffect(
     () => () => {
-      searchRequest.current?.abort();
       lookupRequest.current?.abort();
     },
     [],
@@ -148,10 +118,8 @@ export function StreamOfferEditor({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            searchRequest.current?.abort();
             setOpen(true);
-            setSearch({ status: "loading", offers: [] });
-            setSearchAttempt((current) => current + 1);
+            searchNow();
           }}
         >
           <label
@@ -165,14 +133,8 @@ export function StreamOfferEditor({
               onFocus={() => setOpen(true)}
               onClick={() => setOpen(true)}
               onChange={(event) => {
-                searchRequest.current?.abort();
                 setOpen(true);
-                setQuery(event.target.value);
-                setSearchAttempt(0);
-                setSearch({
-                  status: event.target.value.trim() ? "loading" : "idle",
-                  offers: [],
-                });
+                changeQuery(event.target.value);
               }}
               className="mt-1 block w-full rounded-lg border bg-background px-3 py-2"
             />

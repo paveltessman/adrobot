@@ -1,3 +1,9 @@
+import {
+  isRecord,
+  isPositiveId,
+  keitaroUrl,
+  readApiData,
+} from "./keitaro-api.ts";
 export interface StreamOffer {
   offer_id: number;
   share: number;
@@ -34,22 +40,14 @@ export interface CampaignDetails {
   streams: CampaignStream[];
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function id(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
 function isStream(value: unknown, campaignId: number): value is CampaignStream {
-  if (!record(value)) return false;
+  if (!isRecord(value)) return false;
   const memberships = value.offers;
   const details = value.offer_details;
   const removed = value.removed_offers;
   const pins = value.pinned_offer_ids;
   return (
-    id(value.id) &&
+    isPositiveId(value.id) &&
     value.campaign_id === campaignId &&
     ["name", "type", "state", "schema", "action_type"].every(
       (key) => typeof value[key] === "string",
@@ -57,31 +55,31 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
     Number.isSafeInteger(value.position) &&
     (value.action_payload === null ||
       typeof value.action_payload === "string" ||
-      record(value.action_payload) ||
+      isRecord(value.action_payload) ||
       Array.isArray(value.action_payload)) &&
     Array.isArray(value.filters) &&
-    value.filters.every(record) &&
+    value.filters.every(isRecord) &&
     Array.isArray(memberships) &&
     Array.isArray(pins) &&
-    pins.every((pin: unknown) => id(pin)) &&
+    pins.every((pin: unknown) => isPositiveId(pin)) &&
     new Set(pins).size === pins.length &&
     pins.every((pin) =>
       memberships.some(
-        (item: unknown) => record(item) && item.offer_id === pin,
+        (item: unknown) => isRecord(item) && item.offer_id === pin,
       ),
     ) &&
     memberships.every(
       (item: unknown) =>
-        record(item) &&
-        id(item.offer_id) &&
+        isRecord(item) &&
+        isPositiveId(item.offer_id) &&
         Number.isSafeInteger(item.share) &&
         typeof item.state === "string",
     ) &&
     Array.isArray(details) &&
     details.every(
       (item: unknown) =>
-        record(item) &&
-        id(item.id) &&
+        isRecord(item) &&
+        isPositiveId(item.id) &&
         typeof item.name === "string" &&
         typeof item.state === "string",
     ) &&
@@ -95,8 +93,8 @@ function isStream(value: unknown, campaignId: number): value is CampaignStream {
     Array.isArray(removed) &&
     removed.every(
       (item: unknown) =>
-        record(item) &&
-        id(item.id) &&
+        isRecord(item) &&
+        isPositiveId(item.id) &&
         typeof item.name === "string" &&
         typeof item.last_known_state === "string",
     ) &&
@@ -112,7 +110,7 @@ export function isCampaignDetails(
   campaignId: number,
 ): value is CampaignDetails {
   return (
-    record(value) &&
+    isRecord(value) &&
     value.id === campaignId &&
     typeof value.name === "string" &&
     ["alias", "state", "notes", "updated_at"].every(
@@ -136,27 +134,21 @@ export async function getCampaignDetails(
   campaignId: number,
   signal?: AbortSignal,
 ): Promise<CampaignDetails> {
-  if (!id(campaignId))
+  if (!isPositiveId(campaignId))
     throw new RangeError("Campaign ID must be a positive safe integer");
-  const response = await fetch(
-    `/api/v1/integrations/keitaro/campaigns/${campaignId}`,
-    { cache: "no-store", signal },
-  );
+  const response = await fetch(keitaroUrl(`campaigns/${campaignId}`), {
+    cache: "no-store",
+    signal,
+  });
   if (response.status === 404)
     throw new CampaignNotFoundError("Campaign not found");
   if (!response.ok)
     throw new Error("Unable to load campaign. Please try again.");
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
+  const data = await readApiData(
+    response,
+    "The campaign service returned an invalid response.",
+  );
+  if (!isCampaignDetails(data, campaignId))
     throw new Error("The campaign service returned an invalid response.");
-  }
-  if (
-    !record(body) ||
-    body.error !== null ||
-    !isCampaignDetails(body.data, campaignId)
-  )
-    throw new Error("The campaign service returned an invalid response.");
-  return body.data;
+  return data;
 }

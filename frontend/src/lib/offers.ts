@@ -1,3 +1,9 @@
+import {
+  isRecord,
+  isPositiveId,
+  keitaroUrl,
+  readApiData,
+} from "./keitaro-api.ts";
 import { LocalizedError } from "./i18n/errors.ts";
 export interface Offer {
   id: number;
@@ -6,41 +12,28 @@ export interface Offer {
 }
 
 function isOffer(value: unknown): value is Offer {
-  if (typeof value !== "object" || value === null) return false;
-  const offer = value as Record<string, unknown>;
   return (
-    Number.isSafeInteger(offer.id) &&
-    (offer.id as number) > 0 &&
-    typeof offer.name === "string" &&
-    typeof offer.state === "string"
+    isRecord(value) &&
+    isPositiveId(value.id) &&
+    typeof value.name === "string" &&
+    typeof value.state === "string"
   );
 }
 
 export class OfferUnavailableError extends LocalizedError {}
 
 async function load(path: string, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetch(`/api/v1/integrations/keitaro/offers${path}`, {
+  const response = await fetch(keitaroUrl(`offers${path}`), {
     cache: "no-store",
     signal,
   });
   if (response.status === 404 && !path.startsWith("?"))
     throw new OfferUnavailableError("offerNoLongerAvailable");
   if (!response.ok) throw new Error("Unable to load offers. Please try again.");
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error("The offer service returned an invalid response.");
-  }
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("error" in body) ||
-    body.error !== null ||
-    !("data" in body)
-  )
-    throw new Error("The offer service returned an invalid response.");
-  return body.data;
+  return readApiData(
+    response,
+    "The offer service returned an invalid response.",
+  );
 }
 
 export async function searchOffers(
@@ -64,7 +57,7 @@ export async function getOffer(
   id: number,
   signal?: AbortSignal,
 ): Promise<Offer> {
-  if (!Number.isSafeInteger(id) || id <= 0)
+  if (!isPositiveId(id))
     throw new RangeError("Offer ID must be a positive safe integer.");
   const data = await load(`/${id}`, signal);
   if (!isOffer(data) || data.id !== id)
