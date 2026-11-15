@@ -55,6 +55,9 @@ for (const data of [
   null,
   {},
   page([{ id: "1", name: "Invalid ID" }]),
+  ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map((id) =>
+    page([{ id, name: "Invalid ID" }]),
+  ),
   page([{ id: 1, name: null }]),
   { ...page(), has_more: "yes" },
   { ...page(), items: null },

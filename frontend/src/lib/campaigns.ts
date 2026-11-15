@@ -1,3 +1,9 @@
+import {
+  isRecord,
+  isPositiveId,
+  keitaroUrl,
+  readApiData,
+} from "./keitaro-api.ts";
 export interface Campaign {
   id: number;
   name: string;
@@ -10,15 +16,9 @@ export interface CampaignPage {
   has_more: boolean;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function isCampaign(value: unknown): value is Campaign {
   return (
-    isRecord(value) &&
-    Number.isSafeInteger(value.id) &&
-    typeof value.name === "string"
+    isRecord(value) && isPositiveId(value.id) && typeof value.name === "string"
   );
 }
 
@@ -60,28 +60,19 @@ export async function getCampaigns({
     limit: String(limit),
     offset: String(offset),
   });
-  const response = await fetch(
-    `/api/v1/integrations/keitaro/campaigns?${query}`,
-    { cache: "no-store", signal },
-  );
+  const response = await fetch(keitaroUrl(`campaigns?${query}`), {
+    cache: "no-store",
+    signal,
+  });
   if (!response.ok) {
     throw new Error("Unable to load campaigns. Please try again.");
   }
 
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
+  const data = await readApiData(
+    response,
+    "The campaign service returned an invalid response.",
+  );
+  if (!isCampaignPage(data) || data.limit !== limit || data.offset !== offset)
     throw new Error("The campaign service returned an invalid response.");
-  }
-  if (
-    !isRecord(body) ||
-    body.error !== null ||
-    !isCampaignPage(body.data) ||
-    body.data.limit !== limit ||
-    body.data.offset !== offset
-  ) {
-    throw new Error("The campaign service returned an invalid response.");
-  }
-  return body.data;
+  return data;
 }

@@ -1,3 +1,9 @@
+import {
+  isRecord,
+  isPositiveId,
+  keitaroUrl,
+  readApiData,
+} from "./keitaro-api.ts";
 import type { MessageKey } from "./i18n/index.ts";
 import { LocalizedError, LocalizedRangeError } from "./i18n/errors.ts";
 import {
@@ -70,13 +76,9 @@ export function proposedChanges(
     });
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function sameChange(value: unknown, expected: StreamChange): boolean {
   if (
-    !record(value) ||
+    !isRecord(value) ||
     value.stream_id !== expected.stream_id ||
     !Array.isArray(value.offers) ||
     !Array.isArray(value.pinned_offer_ids)
@@ -89,7 +91,7 @@ function sameChange(value: unknown, expected: StreamChange): boolean {
     expected.offers.every((offer) =>
       offers.some(
         (item) =>
-          record(item) &&
+          isRecord(item) &&
           item.offer_id === offer.offer_id &&
           item.share === offer.share &&
           item.state === offer.state,
@@ -121,7 +123,7 @@ function parseResult(
   changes: StreamChange[],
 ): CampaignPushResult {
   if (
-    !record(value) ||
+    !isRecord(value) ||
     typeof value.status !== "string" ||
     !["applied", "partial", "failed", "unknown"].includes(
       String(value.status),
@@ -172,25 +174,23 @@ export async function pushCampaign(
   campaignId: number,
   changes: StreamChange[],
 ): Promise<CampaignPushResult> {
-  if (!Number.isSafeInteger(campaignId) || campaignId < 1 || !changes.length)
+  if (!isPositiveId(campaignId) || !changes.length)
     throw new RangeError("Push requires a campaign and pending changes.");
-  const response = await fetch(
-    `/api/v1/integrations/keitaro/campaigns/${campaignId}/push`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ streams: changes }),
-    },
-  );
+  const response = await fetch(keitaroUrl(`campaigns/${campaignId}/push`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ streams: changes }),
+  });
   if (response.status === 422) throw new PushRejectedError("pushRejected");
   if (response.status === 404)
     throw new PushRejectedError("pushCampaignUnavailable");
   if (!response.ok) throw new Error("Could not confirm the Push outcome.");
-  const body: unknown = await response.json();
-  if (!record(body) || body.error !== null)
-    throw new Error("Could not confirm the Push response.");
-  return parseResult(body.data, campaignId, changes);
+  const data = await readApiData(
+    response,
+    "Could not confirm the Push response.",
+  );
+  return parseResult(data, campaignId, changes);
 }
 
 export function confirmedDrafts(
