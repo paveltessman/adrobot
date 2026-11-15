@@ -1,0 +1,6 @@
+**
+!requirements.txt
+!adrobot/
+!adrobot/**
+**/__pycache__/
+**/test_*.py

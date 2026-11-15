@@ -16,6 +16,7 @@ if (
 }
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   async rewrites() {
     return [
       ...["domains", "campaign-groups", "traffic-sources"].map((resource) => ({

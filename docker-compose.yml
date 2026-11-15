@@ -1,0 +1,28 @@
+services:
+  backend:
+    image: ghcr.io/paveltessman/adrobot-backend:${ADROBOT_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      ADROBOT_KEITARO_BASE_URL: ${ADROBOT_KEITARO_BASE_URL:?Set ADROBOT_KEITARO_BASE_URL in .env}
+      ADROBOT_KEITARO_API_KEY: ${ADROBOT_KEITARO_API_KEY:?Set ADROBOT_KEITARO_API_KEY in .env}
+      ADROBOT_DATABASE_URL: sqlite+aiosqlite:////data/adrobot.sqlite3
+    volumes:
+      - adrobot-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    image: ghcr.io/paveltessman/adrobot-frontend:${ADROBOT_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  adrobot-data:
