@@ -1,3 +1,4 @@
+import type { MessageKey } from "./i18n/index.ts";
 import type { CampaignStream } from "./campaign-details.ts";
 
 export interface DraftOffer {
@@ -14,7 +15,7 @@ export interface StreamDraft {
   streamId: number;
   baseline: readonly DraftOffer[];
   offers: readonly DraftOffer[];
-  error: string | null;
+  error: MessageKey | null;
 }
 
 export type MembershipStatus =
@@ -63,18 +64,17 @@ function balance(draft: StreamDraft, offers: DraftOffer[]): StreamDraft {
     .filter((offer) => !offer.pinned)
     .sort((a, b) => a.id - b.id);
   const remaining = 100 - pinned.reduce((sum, offer) => sum + offer.share, 0);
-  let error: string | null = null;
-  if (attached.length === 0) error = "A stream must have at least one offer.";
+  let error: MessageKey | null = null;
+  if (attached.length === 0) error = "streamNeedsOffer";
   else if (
     pinned.some(
       (offer) =>
         !Number.isInteger(offer.share) || offer.share < 0 || offer.share > 100,
     )
   )
-    error = "Pinned percentages must be whole numbers between 0 and 100.";
-  else if (remaining < 0) error = "Pinned allocations exceed 100%.";
-  else if (automatic.length === 0 && remaining !== 0)
-    error = "All offers are pinned but their allocations do not total 100%.";
+    error = "pinnedWhole";
+  else if (remaining < 0) error = "pinsExceed";
+  else if (automatic.length === 0 && remaining !== 0) error = "pinsTotal";
 
   const shares = new Map<number, number>();
   if (!error && automatic.length > 0) {

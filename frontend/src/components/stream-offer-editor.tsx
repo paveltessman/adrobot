@@ -1,6 +1,9 @@
 "use client";
 
+import { displayState, type MessageKey } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
+import { useTranslations, useLocale } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import type { CampaignStream } from "@/lib/campaign-details";
 import {
@@ -28,6 +31,8 @@ export function StreamOfferEditor({
   draft: StreamDraft;
   setDraft: (update: (current: StreamDraft) => StreamDraft) => void;
 }) {
+  const t = useTranslations();
+  const locale = useLocale();
   const container = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -36,7 +41,9 @@ export function StreamOfferEditor({
     offers: Offer[];
   }>({ status: "idle", offers: [] });
   const [pending, setPending] = useState<number | null>(null);
-  const [messages, setMessages] = useState<Record<number, string>>({});
+  const [messages, setMessages] = useState<Partial<Record<number, MessageKey>>>(
+    {},
+  );
   const [unavailable, setUnavailable] = useState<ReadonlySet<number>>(
     new Set(),
   );
@@ -83,7 +90,7 @@ export function StreamOfferEditor({
     const controller = new AbortController();
     lookupRequest.current = controller;
     setPending(id);
-    setMessages((current) => ({ ...current, [id]: "" }));
+    setMessages((current) => ({ ...current, [id]: undefined }));
     try {
       const offer = await getOffer(id, controller.signal);
       if (!controller.signal.aborted) {
@@ -97,8 +104,8 @@ export function StreamOfferEditor({
           ...current,
           [id]:
             error instanceof OfferUnavailableError
-              ? error.message
-              : "Could not check offer availability. Please try again.",
+              ? error.key
+              : "availabilityFailed",
         }));
         if (error instanceof OfferUnavailableError)
           setUnavailable((current) => new Set([...current, id]));
@@ -151,7 +158,7 @@ export function StreamOfferEditor({
             className="min-w-0 flex-1 text-sm"
             htmlFor={`offer-search-${stream.id}`}
           >
-            Search offers by name or ID
+            {t("searchOffers")}
             <input
               id={`offer-search-${stream.id}`}
               value={query}
@@ -176,7 +183,7 @@ export function StreamOfferEditor({
             aria-expanded={open && search.status !== "idle"}
             aria-controls={`offer-search-dropdown-${stream.id}`}
           >
-            Search
+            {t("search")}
           </Button>
         </form>
         {open && search.status !== "idle" && (
@@ -186,21 +193,21 @@ export function StreamOfferEditor({
           >
             {search.status === "loading" && (
               <p role="status" className="mt-3 text-sm">
-                Searching offers…
+                {t("searchingOffers")}
               </p>
             )}
             {search.status === "error" && (
               <p role="alert" className="mt-3 text-sm">
-                Could not search offers. Please try again.
+                {t("searchFailed")}
               </p>
             )}
             {search.status === "ready" &&
               (search.offers.length === 0 ? (
                 <p role="status" className="mt-3 text-sm">
-                  No matching offers.
+                  {t("noMatchingOffers")}
                 </p>
               ) : (
-                <ul aria-label="Offer search results" className="mt-3 divide-y">
+                <ul aria-label={t("searchResults")} className="mt-3 divide-y">
                   {search.offers.map((offer) => {
                     const attached = draft.offers.some(
                       (item) => item.id === offer.id && item.attached,
@@ -217,21 +224,21 @@ export function StreamOfferEditor({
                           onClick={() => void stageOffer(offer.id)}
                         >
                           <span className="min-w-0 [overflow-wrap:anywhere]">
-                            {offer.name || "Unnamed offer"} · ID: {offer.id}
+                            {offer.name || t("unnamedOffer")} · ID: {offer.id}
                           </span>
                           <span className="shrink-0 text-muted-foreground">
                             {attached
-                              ? "Already attached"
+                              ? t("alreadyAttached")
                               : blocked
-                                ? "Unavailable"
+                                ? t("unavailable")
                                 : pending === offer.id
-                                  ? "Checking…"
+                                  ? t("checking")
                                   : ""}
                           </span>
                         </button>
                         {messages[offer.id] && (
                           <p role="alert" className="w-full text-sm">
-                            {messages[offer.id]}
+                            {t(messages[offer.id]!)}
                           </p>
                         )}
                       </li>
@@ -244,21 +251,32 @@ export function StreamOfferEditor({
       </div>
       {draft.error && (
         <p role="alert" className="mt-4 text-sm text-destructive">
-          {draft.error}
+          {t(draft.error)}
         </p>
       )}
       {visible.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          No offers attached to this stream.
+          {t("noAttachedOffers")}
         </p>
       ) : (
         <ul
           className="mt-3 divide-y"
-          aria-label={`Offers in ${stream.name || `stream ${stream.id}`}`}
+          aria-label={t("offersIn", {
+            stream: stream.name || t("streamFallback", { id: stream.id }),
+          })}
         >
           {visible.map((offer) => {
             const status = membershipStatus(draft, offer.id);
-            const label = status.charAt(0).toUpperCase() + status.slice(1);
+            const label = t(
+              (
+                {
+                  attached: "attached",
+                  "pending addition": "pendingAddition",
+                  "pending removal": "pendingRemoval",
+                  removed: "removed",
+                } as const
+              )[status],
+            );
             const previous = draft.baseline.find(
               (item) => item.id === offer.id,
             );
@@ -272,43 +290,50 @@ export function StreamOfferEditor({
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium [overflow-wrap:anywhere]">
-                    {offer.name || "Unnamed offer"}
+                    {offer.name || t("unnamedOffer")}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Offer ID: {offer.id} · {label}
+                    {t("offerId", { id: offer.id })} · {label}
                   </p>
                   {offer.attached ? (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Membership: {offer.membershipState} · Offer: {offer.state}
+                      {t("membershipOffer", {
+                        membership: displayState(locale, offer.membershipState),
+                        state: displayState(locale, offer.state),
+                      })}
                     </p>
                   ) : (
                     status === "removed" && (
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Last known offer status: {offer.state}.{" "}
-                        {!messages[offer.id] &&
-                          "Current availability has not been checked."}
+                        {t("historicalOfferState", {
+                          state: displayState(locale, offer.state),
+                        })}{" "}
+                        {!messages[offer.id] && t("availabilityUnchecked")}
                       </p>
                     )
                   )}
                   {messages[offer.id] && (
                     <p role="alert" className="mt-2 text-sm">
-                      {messages[offer.id]}
+                      {t(messages[offer.id]!)}
                     </p>
                   )}
                 </div>
                 <div className="space-y-2 text-sm">
                   {(shareChanged || status === "pending removal") && (
                     <p className="text-muted-foreground">
-                      Current traffic: {previous?.attached ? previous.share : 0}
-                      %
+                      {t("currentTraffic", {
+                        share: previous?.attached ? previous.share : 0,
+                      })}
                     </p>
                   )}
                   {offer.attached ? (
                     <>
                       <p>
-                        {shareChanged ? "Proposed traffic" : "Traffic share"}:{" "}
-                        <span className="font-semibold">{offer.share}%</span>
-                        {offer.pinned && " · Pinned"}
+                        {shareChanged
+                          ? t("proposedTraffic")
+                          : t("trafficShare")}
+                        : <span className="font-semibold">{offer.share}%</span>
+                        {offer.pinned && t("pinnedSuffix")}
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -320,7 +345,7 @@ export function StreamOfferEditor({
                             )
                           }
                         >
-                          {offer.pinned ? "Unpin" : "Pin"}
+                          {offer.pinned ? t("unpin") : t("pin")}
                         </Button>
                         <Button
                           variant="outline"
@@ -330,24 +355,22 @@ export function StreamOfferEditor({
                             )
                           }
                         >
-                          Remove
+                          {t("remove")}
                         </Button>
                       </div>
                     </>
                   ) : (
                     <>
                       {status === "pending removal" && (
-                        <p>Proposed traffic: 0%</p>
+                        <p>{t("proposedTraffic")}: 0%</p>
                       )}
-                      <p className="text-muted-foreground">
-                        No traffic allocated
-                      </p>
+                      <p className="text-muted-foreground">{t("noTraffic")}</p>
                       <Button
                         variant="outline"
                         disabled={pending !== null || unavailable.has(offer.id)}
                         onClick={() => void stageOffer(offer.id)}
                       >
-                        {pending === offer.id ? "Checking…" : "Restore"}
+                        {pending === offer.id ? t("checking") : t("restore")}
                       </Button>
                     </>
                   )}

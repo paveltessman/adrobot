@@ -1,3 +1,5 @@
+import type { MessageKey } from "./i18n/index.ts";
+import { LocalizedError, LocalizedRangeError } from "./i18n/errors.ts";
 import {
   createStreamDraft,
   hasChanges,
@@ -21,27 +23,27 @@ export interface CampaignPushResult {
   pending_streams: StreamChange[];
 }
 
-export class PushRejectedError extends Error {}
+export class PushRejectedError extends LocalizedError {}
 
-export function draftPushError(draft: StreamDraft): string | null {
+export function draftPushError(draft: StreamDraft): MessageKey | null {
   if (draft.error) return draft.error;
   const attached = draft.offers.filter((offer) => offer.attached);
-  if (!attached.length) return "A stream must have at least one offer.";
+  if (!attached.length) return "streamNeedsOffer";
   if (
     attached.some(
       (offer) =>
         !Number.isInteger(offer.share) || offer.share < 0 || offer.share > 100,
     )
   )
-    return "Traffic percentages must be whole numbers between 0 and 100.";
+    return "trafficWhole";
   if (attached.reduce((sum, offer) => sum + offer.share, 0) !== 100)
-    return "Traffic percentages must total 100%.";
+    return "trafficTotal";
   if (
     attached.some(
       (offer) => !["active", "disabled"].includes(offer.membershipState),
     )
   )
-    return "This stream contains an unsupported membership state.";
+    return "unsupportedMembership";
   return null;
 }
 
@@ -52,7 +54,7 @@ export function proposedChanges(
     .filter(hasChanges)
     .map((draft) => {
       const error = draftPushError(draft);
-      if (error) throw new RangeError(error);
+      if (error) throw new LocalizedRangeError(error);
       const attached = draft.offers.filter((offer) => offer.attached);
       return {
         stream_id: draft.streamId,
@@ -181,14 +183,9 @@ export async function pushCampaign(
       body: JSON.stringify({ streams: changes }),
     },
   );
-  if (response.status === 422)
-    throw new PushRejectedError(
-      "Push was rejected. Check offer availability and traffic percentages, then try again.",
-    );
+  if (response.status === 422) throw new PushRejectedError("pushRejected");
   if (response.status === 404)
-    throw new PushRejectedError(
-      "Campaign is unavailable. Your draft has been kept.",
-    );
+    throw new PushRejectedError("pushCampaignUnavailable");
   if (!response.ok) throw new Error("Could not confirm the Push outcome.");
   const body: unknown = await response.json();
   if (!record(body) || body.error !== null)
@@ -220,8 +217,7 @@ export function reconcileDrafts(
     if (!baseline) {
       result[id] = {
         ...draft,
-        error:
-          "This stream is no longer available for offer editing. Cancel to discard its pending changes.",
+        error: "streamUnavailable",
       };
       continue;
     }

@@ -1,3 +1,4 @@
+import { LocalizedError } from "./i18n/errors.ts";
 export interface Offer {
   id: number;
   name: string;
@@ -15,7 +16,7 @@ function isOffer(value: unknown): value is Offer {
   );
 }
 
-export class OfferUnavailableError extends Error {}
+export class OfferUnavailableError extends LocalizedError {}
 
 async function load(path: string, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(`/api/v1/integrations/keitaro/offers${path}`, {
@@ -23,7 +24,7 @@ async function load(path: string, signal?: AbortSignal): Promise<unknown> {
     signal,
   });
   if (response.status === 404 && !path.startsWith("?"))
-    throw new OfferUnavailableError("This offer is no longer available.");
+    throw new OfferUnavailableError("offerNoLongerAvailable");
   if (!response.ok) throw new Error("Unable to load offers. Please try again.");
   let body: unknown;
   try {
@@ -69,6 +70,6 @@ export async function getOffer(
   if (!isOffer(data) || data.id !== id)
     throw new Error("The offer service returned an invalid response.");
   if (data.state === "deleted" || data.state === "archived")
-    throw new OfferUnavailableError("This offer is archived or deleted.");
+    throw new OfferUnavailableError("offerArchivedDeleted");
   return data;
 }
