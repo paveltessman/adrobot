@@ -56,6 +56,9 @@ class Stream(_Base):
     filter_or: bool = False
     updated_at: str | None = None
 
+    def get_offer_ids(self) -> set[int]:
+        return {offer.offer_id for offer in self.offers}
+
 
 class RemovedOffer(_Base):
     id: int

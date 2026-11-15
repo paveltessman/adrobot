@@ -7,26 +7,26 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from .api_client import KeitaroApiClient
-from .exceptions import InvalidCampaignPush
-from .models import CampaignConfiguration
-from .models import Offer
-from .models import Stream
-from .models import StreamOffer
+from ..api_client import KeitaroApiClient
+from ..exceptions import InvalidCampaignPush
+from ..factory import create_keitaro_service
+from ..models import CampaignConfiguration
+from ..models import Offer
+from ..models import Stream
+from ..models import StreamOffer
+from ..test_service import history
+from ..test_service import ServiceCase
+from ..test_service import stream
 from .push_models import CampaignPushRequest
 from .push_models import ProposedOffer
 from .push_models import StreamChange
-from .service import KeitaroService
-from .test_service import history
-from .test_service import ServiceCase
-from .test_service import stream
 from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import MembershipScope
-from adrobot.storage.memberships import PinRepository
 
 
 @pytest.fixture(name="case")
@@ -35,7 +35,9 @@ async def push_case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[ServiceCa
     database = Database("sqlite+aiosqlite:///:memory:")
     await database.initialize()
     result = ServiceCase(
-        service=KeitaroService(client, database, "https://example.com/admin_api/v1/"),
+        service=create_keitaro_service(
+            client, database, "https://example.com/admin_api/v1/"
+        ),
         database=database,
         campaigns=AsyncMock(return_value=[]),
         configuration=AsyncMock(
@@ -133,7 +135,7 @@ async def test_success_reconciles_history_pins_and_preserves_google(
 
 async def saved_pins(case: ServiceCase, stream_id: int) -> list[int]:
     async with case.database.transaction() as session:
-        return await PinRepository(session).list(
+        return await CampaignStateRepository(session).list_pins(
             MembershipScope("https://example.com/admin_api/v1/", 7, stream_id)
         )
 
@@ -254,8 +256,8 @@ async def test_unknown_outcome_retains_all_proposals_and_last_confirmed_pins(
     monkeypatch.setattr(KeitaroApiClient, "update_stream_offers", update)
     if storage_failure:
         monkeypatch.setattr(
-            PinRepository,
-            "replace",
+            CampaignStateRepository,
+            "replace_pins",
             AsyncMock(side_effect=SQLAlchemyError("database failed")),
         )
     result = await case.service.push_campaign(

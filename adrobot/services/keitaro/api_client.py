@@ -2,9 +2,10 @@
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from .create_models import CampaignCreateRequest
-from .create_models import CreatedIdentity
-from .create_models import CreationResource
+from .campaigns.create_models import CampaignCreateRequest
+from .campaigns.create_models import CreatedIdentity
+from .campaigns.create_models import CreationResource
+from .campaigns.push_models import ProposedOffer
 from .exceptions import KeitaroApiError
 from .models import Campaign
 from .models import CampaignConfiguration
@@ -14,7 +15,6 @@ from .models import Domain
 from .models import Offer
 from .models import Stream
 from .models import TrafficSource
-from .push_models import ProposedOffer
 from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http.types import JsonValue
 from adrobot.services.network.http.types import QueryParams

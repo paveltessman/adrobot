@@ -4,13 +4,10 @@ from dataclasses import dataclass
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
+from .base import Base
 
 
 @dataclass(frozen=True)
@@ -40,38 +37,6 @@ class ObservedMembership(Base):
     attached: Mapped[bool]
 
 
-class MembershipRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
-
-    async def list(self, scope: MembershipScope) -> list[Membership]:
-        rows = await self._session.scalars(
-            select(ObservedMembership)
-            .where(
-                ObservedMembership.instance == scope.instance,
-                ObservedMembership.campaign_id == scope.campaign_id,
-                ObservedMembership.stream_id == scope.stream_id,
-            )
-            .order_by(ObservedMembership.offer_id)
-        )
-        return [
-            Membership(row.offer_id, row.name, row.state, row.attached) for row in rows
-        ]
-
-    async def save(self, scope: MembershipScope, membership: Membership) -> None:
-        await self._session.merge(
-            ObservedMembership(
-                instance=scope.instance,
-                campaign_id=scope.campaign_id,
-                stream_id=scope.stream_id,
-                offer_id=membership.offer_id,
-                name=membership.name,
-                state=membership.state,
-                attached=membership.attached,
-            )
-        )
-
-
 class CommittedPin(Base):
     __tablename__ = "committed_pins"
 
@@ -81,11 +46,47 @@ class CommittedPin(Base):
     offer_id: Mapped[int] = mapped_column(primary_key=True)
 
 
-class PinRepository:
+class CampaignStateRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def list(self, scope: MembershipScope) -> list[int]:
+    async def list_memberships(self, scope: MembershipScope) -> list[Membership]:
+        rows = await self._session.scalars(
+            select(ObservedMembership)
+            .where(
+                ObservedMembership.instance == scope.instance,
+                ObservedMembership.campaign_id == scope.campaign_id,
+                ObservedMembership.stream_id == scope.stream_id,
+            )
+            .order_by(ObservedMembership.offer_id)
+        )
+
+        result = [
+            Membership(
+                row.offer_id,
+                row.name,
+                row.state,
+                row.attached,
+            )
+            for row in rows
+        ]
+        return result
+
+    async def save_membership(
+        self, scope: MembershipScope, membership: Membership
+    ) -> None:
+        observed_membership = ObservedMembership(
+            instance=scope.instance,
+            campaign_id=scope.campaign_id,
+            stream_id=scope.stream_id,
+            offer_id=membership.offer_id,
+            name=membership.name,
+            state=membership.state,
+            attached=membership.attached,
+        )
+        await self._session.merge(observed_membership)
+
+    async def list_pins(self, scope: MembershipScope) -> list[int]:
         rows = await self._session.scalars(
             select(CommittedPin.offer_id)
             .where(
@@ -97,7 +98,8 @@ class PinRepository:
         )
         return list(rows)
 
-    async def replace(self, scope: MembershipScope, offer_ids: set[int]) -> None:
+    async def replace_pins(self, scope: MembershipScope, offer_ids: set[int]) -> None:
+
         await self._session.execute(
             delete(CommittedPin).where(
                 CommittedPin.instance == scope.instance,

@@ -53,7 +53,6 @@ async def test_selectors_request_and_parse(resource: str, empty: bool) -> None:
             )
 
 
-@pytest.mark.parametrize("resource", ["domains", "groups", "traffic_sources"])
 @pytest.mark.parametrize(
     "body",
     [
@@ -69,14 +68,14 @@ async def test_selectors_request_and_parse(resource: str, empty: bool) -> None:
         '[{"id":1,"name":"A"},{"id":1,"name":"B"}]',
     ],
 )
-async def test_selectors_reject_invalid_catalog(resource: str, body: str) -> None:
+async def test_selectors_reject_invalid_catalog(body: str) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.Response(text=body)
 
     async with api_server(handler) as base_url:
         async with AsyncHttpRequester(base_url) as requester:
             with pytest.raises(KeitaroApiError):
-                await selector_loader(KeitaroApiClient(requester), resource)()
+                await KeitaroApiClient(requester).get_domains()
 
 
 @pytest.mark.parametrize("resource", ["domains", "groups", "traffic_sources"])

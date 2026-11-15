@@ -10,7 +10,7 @@ from pydantic import field_validator
 from pydantic import model_validator
 from pydantic import StringConstraints
 
-from .models import CampaignDetails
+from ..models import CampaignDetails
 
 
 type CountryCode = Annotated[

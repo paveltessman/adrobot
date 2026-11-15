@@ -8,13 +8,13 @@ from pydantic import JsonValue
 from .dependencies import get_keitaro_service
 from .server import create_app
 from .test_server import http_client
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushRequest
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushResult
+from adrobot.services.keitaro.campaigns.test_push import change
 from adrobot.services.keitaro.exceptions import CampaignNotFoundError
 from adrobot.services.keitaro.exceptions import InvalidCampaignPush
 from adrobot.services.keitaro.models import CampaignDetails
-from adrobot.services.keitaro.push_models import CampaignPushRequest
-from adrobot.services.keitaro.push_models import CampaignPushResult
 from adrobot.services.keitaro.service import KeitaroService
-from adrobot.services.keitaro.test_push import change
 from adrobot.settings.settings import Settings
 
 _PATH = "/api/v1/integrations/keitaro/campaigns/7/push"
@@ -61,8 +61,8 @@ async def test_push_endpoint_returns_reconciliation_result(
     proposed = CampaignPushRequest(streams=[change()])
     async with http_client(app) as client:
         response = await client.post(_PATH, json=proposed.model_dump())
-        assert response.status == 200
-        assert await response.json() == {"data": result.model_dump(), "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": result.model_dump(), "error": None}
     push.assert_awaited_once_with(7, proposed)
 
 
@@ -81,8 +81,8 @@ async def test_push_validation_errors(
         response = await client.post(
             _PATH, json=CampaignPushRequest(streams=[change()]).model_dump()
         )
-        assert response.status == status
-        assert (await response.json())["data"] is None
+        assert response.status_code == status
+        assert response.json()["data"] is None
 
 
 _INVALID_PAYLOADS: list[dict[str, JsonValue]] = [
@@ -99,6 +99,6 @@ async def test_invalid_payload_never_calls_service(
     app, push = push_app(settings, InvalidCampaignPush("should not run"))
     async with http_client(app) as client:
         response = await client.post(_PATH, json=payload)
-        assert response.status == 422
-        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     push.assert_not_awaited()

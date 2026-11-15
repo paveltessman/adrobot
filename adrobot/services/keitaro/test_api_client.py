@@ -225,7 +225,7 @@ async def test_offer_catalog_rejects_invalid_responses(body: str) -> None:
 async def test_stream_update_sends_only_complete_offer_list() -> None:
     from .models import Stream
     from .models import StreamOffer
-    from .push_models import ProposedOffer
+    from .campaigns.push_models import ProposedOffer
 
     members = [
         ProposedOffer(offer_id=9, share=100, state="disabled"),

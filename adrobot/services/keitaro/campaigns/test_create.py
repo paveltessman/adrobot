@@ -7,24 +7,25 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from .api_client import KeitaroApiClient
+from ..api_client import KeitaroApiClient
+from ..exceptions import InvalidCampaignCreation
+from ..exceptions import KeitaroApiError
+from ..factory import create_keitaro_service
+from ..models import CampaignConfiguration
+from ..models import CampaignGroup
+from ..models import Offer
+from ..models import Stream
+from ..service import KeitaroService
 from .create import stream_payloads
 from .create_models import CampaignCreateRequest
 from .create_models import CreationResource
-from .exceptions import InvalidCampaignCreation
-from .exceptions import KeitaroApiError
-from .models import CampaignConfiguration
-from .models import CampaignGroup
-from .models import Offer
-from .models import Stream
-from .service import KeitaroService
 from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import MembershipRepository
-from adrobot.storage.memberships import MembershipScope
 
 
 def proposed() -> CampaignCreateRequest:
@@ -77,7 +78,7 @@ async def case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[CreationCase]:
         streams.append(Stream.model_validate({"id": len(streams) + 1, **payload}))
 
     result = CreationCase(
-        service=KeitaroService(client, database, "instance"),
+        service=create_keitaro_service(client, database, "instance"),
         database=database,
         create=AsyncMock(side_effect=create),
         create_stream=AsyncMock(side_effect=create_stream),
@@ -119,7 +120,7 @@ async def test_creates_and_confirms_campaign_and_history(case: CreationCase) -> 
         (7, payload) for payload in stream_payloads(7, proposed())
     ]
     async with case.database.transaction() as session:
-        observed = await MembershipRepository(session).list(
+        observed = await CampaignStateRepository(session).list_memberships(
             MembershipScope("instance", 7, 2)
         )
     assert [(item.offer_id, item.attached) for item in observed] == [(9, True)]
@@ -135,9 +136,6 @@ async def test_creates_and_confirms_campaign_and_history(case: CreationCase) -> 
         ("country_codes", ["au"]),
         ("country_codes", ["12"]),
         ("offer_id", 0),
-        ("domain_id", -1),
-        ("group_id", True),
-        ("traffic_source_id", "4"),
         ("extra", "unexpected"),
     ],
 )

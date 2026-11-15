@@ -39,8 +39,8 @@ async def test_creation_selectors(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"/api/v1/integrations/keitaro/{resource}")
-        assert response.status == 200
-        assert await response.json() == {"data": options, "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": options, "error": None}
 
 
 @pytest.mark.parametrize(("resource", "upstream"), _RESOURCES)
@@ -62,8 +62,8 @@ async def test_creation_selector_failures(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"/api/v1/integrations/keitaro/{resource}")
-        assert response.status == 502
-        assert await response.json() == {
+        assert response.status_code == 502
+        assert response.json() == {
             "data": None,
             "error": {"code": "UPSTREAM_ERROR", "message": "Upstream request failed"},
         }
