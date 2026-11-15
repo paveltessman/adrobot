@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from . import campaign_state as campaign_state  # noqa: F401 (register models)
 from .base import Base
+from .campaign_state import CampaignStateRepository
 
 
 class Database:
@@ -26,3 +26,10 @@ class Database:
     async def transaction(self) -> AsyncGenerator[AsyncSession]:
         async with self.sessions.begin() as session:
             yield session
+
+    @asynccontextmanager
+    async def campaign_state_transaction(
+        self,
+    ) -> AsyncGenerator[CampaignStateRepository]:
+        async with self.transaction() as session:
+            yield CampaignStateRepository(session)
