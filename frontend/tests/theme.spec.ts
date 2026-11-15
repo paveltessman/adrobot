@@ -19,7 +19,7 @@ test("follows the system and remembers an explicit theme across navigation and r
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   await theme.getByRole("button", { name: "Dark theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.getByRole("link", { name: "Create campaign" }).click();
+  await page.getByRole("link", { name: "Create campaign" }).first().click();
   await expect(
     theme.getByRole("button", { name: "Dark theme" }),
   ).toHaveAttribute("aria-pressed", "true");

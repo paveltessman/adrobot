@@ -121,7 +121,12 @@ export function StreamOfferEditor({
         ref={container}
         className="relative mt-4"
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget))
+          // Disabling a focused result during lookup can blur it without
+          // moving focus elsewhere. Keep lookup progress and errors visible.
+          if (
+            event.relatedTarget &&
+            !event.currentTarget.contains(event.relatedTarget)
+          )
             setOpen(false);
         }}
         onKeyDown={(event) => {
