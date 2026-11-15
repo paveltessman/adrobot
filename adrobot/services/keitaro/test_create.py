@@ -22,9 +22,9 @@ from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import MembershipRepository
-from adrobot.storage.memberships import MembershipScope
 
 
 def proposed() -> CampaignCreateRequest:
@@ -119,7 +119,7 @@ async def test_creates_and_confirms_campaign_and_history(case: CreationCase) -> 
         (7, payload) for payload in stream_payloads(7, proposed())
     ]
     async with case.database.transaction() as session:
-        observed = await MembershipRepository(session).list(
+        observed = await CampaignStateRepository(session).list_memberships(
             MembershipScope("instance", 7, 2)
         )
     assert [(item.offer_id, item.attached) for item in observed] == [(9, True)]

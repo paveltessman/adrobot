@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from .memberships import Base
+from . import campaign_state as campaign_state  # noqa: F401 (register models)
+from .base import Base
 
 
 class Database:

@@ -23,11 +23,10 @@ from .push_models import CampaignPushRequest
 from .push_models import CampaignPushResult
 from .push_models import StreamChange
 from adrobot.services.network.http import HttpStatusError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import Membership
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import Membership
-from adrobot.storage.memberships import MembershipRepository
-from adrobot.storage.memberships import MembershipScope
-from adrobot.storage.memberships import PinRepository
 
 
 class KeitaroService:
@@ -130,16 +129,15 @@ class KeitaroService:
         self, details: CampaignDetails, pin_updates: dict[int, set[int]]
     ) -> None:
         async with self._database.transaction() as session:
-            repository = MembershipRepository(session)
-            pins = PinRepository(session)
+            repository = CampaignStateRepository(session)
             for stream in details.streams:
                 scope = MembershipScope(self._instance, details.id, stream.id)
-                await self._save_pins(pins, scope, pin_updates)
+                await self._save_pins(repository, scope, pin_updates)
                 current_ids = {item.offer_id for item in stream.offers}
                 stream.pinned_offer_ids = await self._reconcile_pins(
-                    pins, scope, current_ids
+                    repository, scope, current_ids
                 )
-                history = await repository.list(scope)
+                history = await repository.list_memberships(scope)
                 stream.removed_offers = [
                     RemovedOffer(
                         id=previous.offer_id,
@@ -151,27 +149,31 @@ class KeitaroService:
                 ]
                 for previous in history:
                     if previous.attached and previous.offer_id not in current_ids:
-                        await repository.save(scope, replace(previous, attached=False))
+                        await repository.save_membership(
+                            scope, replace(previous, attached=False)
+                        )
                 for offer in stream.offer_details:
-                    await repository.save(
+                    await repository.save_membership(
                         scope, Membership(offer.id, offer.name, offer.state, True)
                     )
 
     @staticmethod
     async def _save_pins(
-        pins: PinRepository, scope: MembershipScope, updates: dict[int, set[int]]
+        pins: CampaignStateRepository,
+        scope: MembershipScope,
+        updates: dict[int, set[int]],
     ) -> None:
         if scope.stream_id in updates:
-            await pins.replace(scope, updates[scope.stream_id])
+            await pins.replace_pins(scope, updates[scope.stream_id])
 
     @staticmethod
     async def _reconcile_pins(
-        pins: PinRepository, scope: MembershipScope, current_ids: set[int]
+        pins: CampaignStateRepository, scope: MembershipScope, current_ids: set[int]
     ) -> list[int]:
-        committed_ids = await pins.list(scope)
+        committed_ids = await pins.list_pins(scope)
         retained = [offer_id for offer_id in committed_ids if offer_id in current_ids]
         if retained != committed_ids:
-            await pins.replace(scope, set(retained))
+            await pins.replace_pins(scope, set(retained))
         return retained
 
     async def _get_campaign_configuration(

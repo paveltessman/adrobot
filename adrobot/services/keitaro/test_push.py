@@ -24,9 +24,9 @@ from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import MembershipScope
-from adrobot.storage.memberships import PinRepository
 
 
 @pytest.fixture(name="case")
@@ -133,7 +133,7 @@ async def test_success_reconciles_history_pins_and_preserves_google(
 
 async def saved_pins(case: ServiceCase, stream_id: int) -> list[int]:
     async with case.database.transaction() as session:
-        return await PinRepository(session).list(
+        return await CampaignStateRepository(session).list_pins(
             MembershipScope("https://example.com/admin_api/v1/", 7, stream_id)
         )
 
@@ -254,8 +254,8 @@ async def test_unknown_outcome_retains_all_proposals_and_last_confirmed_pins(
     monkeypatch.setattr(KeitaroApiClient, "update_stream_offers", update)
     if storage_failure:
         monkeypatch.setattr(
-            PinRepository,
-            "replace",
+            CampaignStateRepository,
+            "replace_pins",
             AsyncMock(side_effect=SQLAlchemyError("database failed")),
         )
     result = await case.service.push_campaign(

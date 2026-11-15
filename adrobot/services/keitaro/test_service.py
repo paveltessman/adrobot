@@ -19,11 +19,10 @@ from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpResponse
 from adrobot.services.network.http import HttpStatusError
 from adrobot.services.network.http import NetworkError
+from adrobot.storage.campaign_state import CampaignStateRepository
+from adrobot.storage.campaign_state import Membership
+from adrobot.storage.campaign_state import MembershipScope
 from adrobot.storage.database import Database
-from adrobot.storage.memberships import Membership
-from adrobot.storage.memberships import MembershipRepository
-from adrobot.storage.memberships import MembershipScope
-from adrobot.storage.memberships import PinRepository
 
 
 @dataclass
@@ -231,7 +230,7 @@ async def test_missing_related_resource_is_not_a_missing_campaign(
 
 async def history(case: ServiceCase, stream_id: int) -> list[Membership]:
     async with case.database.transaction() as session:
-        return await MembershipRepository(session).list(
+        return await CampaignStateRepository(session).list_memberships(
             MembershipScope("https://example.com/admin_api/v1/", 7, stream_id)
         )
 
@@ -301,7 +300,7 @@ async def test_removed_history_is_scoped_and_retained_across_refreshes(
 ) -> None:
     instance = "https://example.com/admin_api/v1/"
     async with case.database.transaction() as session:
-        repository = MembershipRepository(session)
+        repository = CampaignStateRepository(session)
         for scope, membership in [
             (MembershipScope(instance, 7, 2), Membership(9, "Old", "active", False)),
             (MembershipScope(instance, 7, 2), Membership(10, "Gone", "deleted", True)),
@@ -318,7 +317,7 @@ async def test_removed_history_is_scoped_and_retained_across_refreshes(
                 Membership(13, "Other stream", "active", False),
             ),
         ]:
-            await repository.save(scope, membership)
+            await repository.save_membership(scope, membership)
     case.streams.return_value = [stream(2, []), stream(4, [])]
     expected = [
         RemovedOffer(id=9, name="Old", last_known_state="active"),
@@ -340,10 +339,10 @@ async def test_history_transaction_rolls_back_all_streams_on_storage_failure(
     case.streams.return_value = [stream(2, [membership]), stream(3, [membership])]
     await case.service.get_campaign_details(7)
     case.streams.return_value = [stream(2, []), stream(3, [])]
-    save = MembershipRepository.save
+    save = CampaignStateRepository.save_membership
 
     async def failing_save(
-        repository: MembershipRepository,
+        repository: CampaignStateRepository,
         scope: MembershipScope,
         membership: Membership,
     ) -> None:
@@ -351,7 +350,7 @@ async def test_history_transaction_rolls_back_all_streams_on_storage_failure(
             raise RuntimeError("storage failure")
         await save(repository, scope, membership)
 
-    monkeypatch.setattr(MembershipRepository, "save", failing_save)
+    monkeypatch.setattr(CampaignStateRepository, "save_membership", failing_save)
     with pytest.raises(RuntimeError, match="storage failure"):
         await case.service.get_campaign_details(7)
     for stream_id in (2, 3):
@@ -367,7 +366,7 @@ async def test_refresh_loads_pins_and_removal_permanently_releases_them(
     membership = StreamOffer(offer_id=9, share=100, state="active")
     case.streams.return_value = [stream(1, [membership]), stream(2, [membership])]
     async with case.database.transaction() as session:
-        await PinRepository(session).replace(scope, {9})
+        await CampaignStateRepository(session).replace_pins(scope, {9})
     result = await case.service.get_campaign_details(7)
     assert result.streams[0].pinned_offer_ids == [9]
     assert result.streams[1].pinned_offer_ids == []
@@ -377,13 +376,13 @@ async def test_refresh_loads_pins_and_removal_permanently_releases_them(
     with pytest.raises(NetworkError):
         await case.service.get_campaign_details(7)
     async with case.database.transaction() as session:
-        assert await PinRepository(session).list(scope) == [9]
+        assert await CampaignStateRepository(session).list_pins(scope) == [9]
     case.offer.side_effect = None
     case.streams.return_value = [stream(1, [])]
     result = await case.service.get_campaign_details(7)
     assert result.streams[0].pinned_offer_ids == []
     async with case.database.transaction() as session:
-        assert await PinRepository(session).list(scope) == []
+        assert await CampaignStateRepository(session).list_pins(scope) == []
     case.streams.return_value = [stream(1, [membership])]
     result = await case.service.get_campaign_details(7)
     assert result.streams[0].pinned_offer_ids == []
