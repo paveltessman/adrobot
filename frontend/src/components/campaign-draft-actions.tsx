@@ -1,4 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/locale-provider";
 import { hasChanges, type StreamDraft } from "@/lib/campaign-draft";
 import { draftPushError } from "@/lib/campaign-push";
 
@@ -15,6 +18,7 @@ export function CampaignDraftActions({
   busy: boolean;
   unknown: boolean;
 }) {
+  const t = useTranslations();
   const changed = Object.values(drafts).filter(hasChanges);
   if (changed.length === 0) return null;
   const errors = changed.flatMap((draft) => {
@@ -29,7 +33,10 @@ export function CampaignDraftActions({
           role="alert"
           className="mb-3 text-sm text-destructive"
         >
-          Cannot push stream {error.streamId}: {error.message}
+          {t("cannotPushStream", {
+            id: error.streamId,
+            error: t(error.message),
+          })}
         </p>
       ))}
       <div className="flex gap-2">
@@ -37,10 +44,10 @@ export function CampaignDraftActions({
           onClick={onPush}
           disabled={busy || unknown || errors.length > 0}
         >
-          {busy ? "Saving…" : "Push"}
+          {busy ? t("saving") : t("push")}
         </Button>
         <Button variant="outline" onClick={onCancel} disabled={busy || unknown}>
-          Cancel
+          {t("cancel")}
         </Button>
       </div>
     </div>

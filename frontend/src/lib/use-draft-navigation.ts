@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-
-const defaultMessage = "Discard pending offer changes and leave this page?";
+import { useTranslations } from "@/components/locale-provider";
 
 // The project's TypeScript DOM definitions predate the Navigation API.
 interface HistoryNavigateEvent extends Event {
@@ -12,8 +11,10 @@ interface HistoryNavigateEvent extends Event {
 
 export function useDraftNavigation(
   dirty: boolean,
-  message = defaultMessage,
+  customMessage?: string,
 ): () => boolean {
+  const t = useTranslations();
+  const message = customMessage ?? t("discardOffersLeave");
   useEffect(() => {
     if (!dirty) return;
     function beforeUnload(event: BeforeUnloadEvent) {

@@ -1,3 +1,5 @@
+import type { MessageKey } from "./i18n/index.ts";
+import { LocalizedError, LocalizedRangeError } from "./i18n/errors.ts";
 import { isCampaignDetails } from "./campaign-details.ts";
 import type { Offer } from "./offers.ts";
 
@@ -35,7 +37,7 @@ export type CreationResult =
   | { status: "unknown"; campaignId: number | null }
   | { status: "failed"; campaignId: null };
 
-export class CreationRejectedError extends Error {}
+export class CreationRejectedError extends LocalizedError {}
 export class CreationUnknownError extends Error {
   readonly campaignId: number | null;
 
@@ -72,25 +74,21 @@ export function parseCountryCodes(value: string): string[] {
 function optionalId(value: string): number | null {
   if (value === "") return null;
   if (!/^[1-9]\d*$/.test(value) || !id(Number(value)))
-    throw new RangeError(
-      "Select a valid domain, campaign group, or traffic source, or choose None.",
-    );
+    throw new LocalizedRangeError("validOptional");
   return Number(value);
 }
 
 export function creationRequest(draft: CreationDraft): CreationRequest {
   const name = draft.name.trim();
   const countries = parseCountryCodes(draft.countryCodes);
-  if (!name) throw new RangeError("Enter a campaign name.");
+  if (!name) throw new LocalizedRangeError("enterCampaignName");
   if (
     !countries.length ||
     countries.some((country) => !/^[A-Z]{2}$/.test(country))
   )
-    throw new RangeError(
-      "Enter two-letter country codes separated by commas or spaces, such as AU, US.",
-    );
+    throw new LocalizedRangeError("enterCountryCodes");
   if (!draft.offer || !id(draft.offer.id) || !availableOffer(draft.offer))
-    throw new RangeError("Select an available offer.");
+    throw new LocalizedRangeError("selectAvailableOffer");
   return {
     name,
     country_codes: countries,
@@ -101,14 +99,12 @@ export function creationRequest(draft: CreationDraft): CreationRequest {
   };
 }
 
-export function creationError(draft: CreationDraft): string | null {
+export function creationError(draft: CreationDraft): MessageKey | null {
   try {
     creationRequest(draft);
     return null;
   } catch (error) {
-    return error instanceof RangeError
-      ? error.message
-      : "Check the form fields.";
+    return error instanceof LocalizedRangeError ? error.key : "checkFields";
   }
 }
 
@@ -185,9 +181,7 @@ export async function createCampaign(
       body: JSON.stringify(payload),
     });
     if (response.status === 422)
-      throw new CreationRejectedError(
-        "Creation was rejected. Check the fields and resource availability, then try again.",
-      );
+      throw new CreationRejectedError("creationRejected");
     if (!response.ok) throw new CreationUnknownError();
     return parseResult(await response.json());
   } catch (error) {

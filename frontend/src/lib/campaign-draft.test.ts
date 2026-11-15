@@ -1,3 +1,4 @@
+import { translate } from "./i18n/index.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CampaignStream } from "./campaign-details.ts";
@@ -191,12 +192,12 @@ test("historical restoration uses fresh details and adding to empty streams work
 
 test("invalid distributions retain pins and can be corrected", () => {
   const lastRemoved = removeOffer(createStreamDraft(stream()), 1);
-  assert.match(lastRemoved.error!, /at least one/);
+  assert.match(translate("en", lastRemoved.error!), /at least one/);
   assert.equal(addOffer(lastRemoved, offer(1)).error, null);
 
   const allPinned = createStreamDraft(stream([40, 60]), [1, 2]);
   const invalid = removeOffer(allPinned, 2);
-  assert.match(invalid.error!, /do not total 100/);
+  assert.match(translate("en", invalid.error!), /do not total 100/);
   assert.equal(invalid.offers[0].share, 40);
   assert.equal(invalid.offers[0].pinned, true);
   assert.deepEqual(shares(setPinned(invalid, 1, false)), [100]);
@@ -205,13 +206,13 @@ test("invalid distributions retain pins and can be corrected", () => {
     createStreamDraft(stream([60, 60]), [1, 2]),
     offer(3),
   );
-  assert.match(excess.error!, /exceed 100/);
+  assert.match(translate("en", excess.error!), /exceed 100/);
   assert.deepEqual(shares(excess), [60, 60, 0]);
   assert.throws(() => setPinned(excess, 3, true), /invalid distribution/);
   assert.equal(setPinned(excess, 1, false).error, null);
 
   const fractional = addOffer(createStreamDraft(stream([33.5]), [1]), offer(2));
-  assert.match(fractional.error!, /whole numbers/);
+  assert.match(translate("en", fractional.error!), /whole numbers/);
 });
 
 test("fully allocated pins permit zero shares without changing pins", () => {

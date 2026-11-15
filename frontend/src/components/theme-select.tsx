@@ -1,6 +1,7 @@
 "use client";
 
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useTranslations } from "@/components/locale-provider";
 
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -28,6 +29,7 @@ function subscribe(callback: () => void) {
 }
 
 export function ThemeSelect() {
+  const t = useTranslations();
   const theme = useSyncExternalStore(subscribe, getTheme, () => "system");
 
   useEffect(() => {
@@ -46,13 +48,13 @@ export function ThemeSelect() {
   return (
     <div
       role="group"
-      aria-label="Color theme"
+      aria-label={t("colorTheme")}
       className="ml-auto flex shrink-0 gap-0.5 rounded-lg border bg-muted/50 p-1"
     >
       {[
-        { value: "system", label: "System theme", icon: Monitor },
-        { value: "light", label: "Light theme", icon: Sun },
-        { value: "dark", label: "Dark theme", icon: Moon },
+        { value: "system", label: t("systemTheme"), icon: Monitor },
+        { value: "light", label: t("lightTheme"), icon: Sun },
+        { value: "dark", label: t("darkTheme"), icon: Moon },
       ].map(({ value, label, icon: Icon }) => (
         <button
           key={value}

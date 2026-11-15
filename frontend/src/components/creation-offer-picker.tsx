@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { availableOffer } from "@/lib/campaign-create";
 import { searchOffers, type Offer } from "@/lib/offers";
@@ -14,6 +15,7 @@ export function CreationOfferPicker({
   onSelect: (offer: Offer | null) => void;
   disabled: boolean;
 }) {
+  const t = useTranslations();
   const container = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -70,10 +72,10 @@ export function CreationOfferPicker({
       }}
     >
       <h2 id="initial-offer-title" className="font-semibold">
-        Initial offer
+        {t("initialOffer")}
       </h2>
       <label htmlFor="offer-search" className="mt-3 block text-sm">
-        Search offers by name or ID
+        {t("searchOffers")}
       </label>
       <div className="relative mt-2">
         <div className="flex flex-wrap gap-2">
@@ -109,7 +111,7 @@ export function CreationOfferPicker({
             aria-controls="offer-search-dropdown"
             onClick={searchNow}
           >
-            Search
+            {t("search")}
           </Button>
         </div>
         {open && !disabled && search.status !== "idle" && (
@@ -119,21 +121,21 @@ export function CreationOfferPicker({
           >
             {search.status === "loading" && !disabled && (
               <p role="status" className="mt-3 text-sm">
-                Searching offers…
+                {t("searchingOffers")}
               </p>
             )}
             {search.status === "error" && (
               <p role="alert" className="mt-3 text-sm">
-                Could not search offers. Use Search to retry.
+                {t("searchRetry")}
               </p>
             )}
             {search.status === "ready" &&
               (search.offers.length === 0 ? (
                 <p role="status" className="mt-3 text-sm text-muted-foreground">
-                  No offers found.
+                  {t("noOffersFound")}
                 </p>
               ) : (
-                <ul aria-label="Offer search results" className="mt-3 divide-y">
+                <ul aria-label={t("searchResults")} className="mt-3 divide-y">
                   {search.offers.map((offer) => (
                     <li key={offer.id}>
                       <button
@@ -152,15 +154,15 @@ export function CreationOfferPicker({
                       >
                         <span className="min-w-0">
                           <span className="block font-medium [overflow-wrap:anywhere]">
-                            {offer.name || "Unnamed offer"}
+                            {offer.name || t("unnamedOffer")}
                           </span>
                           <span className="mt-1 block text-muted-foreground">
-                            Offer ID: {offer.id}
-                            {!availableOffer(offer) && " · Unavailable"}
+                            {t("offerId", { id: offer.id })}
+                            {!availableOffer(offer) && t("unavailableSuffix")}
                           </span>
                         </span>
                         <span className="shrink-0 text-muted-foreground">
-                          {selected?.id === offer.id ? "Selected" : ""}
+                          {selected?.id === offer.id ? t("selected") : ""}
                         </span>
                       </button>
                     </li>
@@ -173,9 +175,9 @@ export function CreationOfferPicker({
       {selected && (
         <div className="mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3 text-sm">
           <p className="font-medium [overflow-wrap:anywhere]">
-            Selected offer: {selected.name || "Unnamed offer"}
+            {t("selectedOffer", { name: selected.name || t("unnamedOffer") })}
           </p>
-          <p className="mt-1">Offer ID: {selected.id}</p>
+          <p className="mt-1">{t("offerId", { id: selected.id })}</p>
           <Button
             type="button"
             variant="outline"
@@ -183,7 +185,7 @@ export function CreationOfferPicker({
             disabled={disabled}
             onClick={() => onSelect(null)}
           >
-            Clear offer
+            {t("clearOffer")}
           </Button>
         </div>
       )}

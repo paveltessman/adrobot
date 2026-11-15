@@ -1,6 +1,15 @@
 "use client";
 
+import {
+  displayState,
+  displaySchema,
+  translate,
+  type Locale,
+  type MessageKey,
+} from "@/lib/i18n";
+
 import Link from "next/link";
+import { useTranslations, useLocale } from "@/components/locale-provider";
 import { StreamOfferEditor } from "@/components/stream-offer-editor";
 import { CampaignDraftActions } from "@/components/campaign-draft-actions";
 import { hasChanges, type StreamDraft } from "@/lib/campaign-draft";
@@ -31,13 +40,15 @@ type LoadState =
       drafts: Record<number, StreamDraft>;
       revision: number;
       sync: "idle" | "pushing" | "checking" | "unknown";
-      feedback: { kind: "success" | "error"; message: string } | null;
+      feedback: { kind: "success" | "error"; message: MessageKey } | null;
     };
 
-function redirectCountries(stream: CampaignStream): string {
+function redirectCountries(stream: CampaignStream, locale: Locale): string {
+  const t = (key: MessageKey, params?: Record<string, string | number>) =>
+    translate(locale, key, params);
   const filters = stream.filters.filter((filter) => filter.name === "country");
-  if (filters.length === 0) return "All countries";
-  const regions = new Intl.DisplayNames(["en"], { type: "region" });
+  if (filters.length === 0) return t("allCountries");
+  const regions = new Intl.DisplayNames([locale], { type: "region" });
   return filters
     .map((filter) => {
       const codes = Array.isArray(filter.payload)
@@ -55,7 +66,9 @@ function redirectCountries(stream: CampaignStream): string {
             : code;
         })
         .join(", ");
-      return `${filter.mode === "reject" ? "Except " : ""}${countries || "Not specified"}`;
+      return filter.mode === "reject"
+        ? t("exceptCountries", { countries: countries || t("notSpecified") })
+        : countries || t("notSpecified");
     })
     .join("; ");
 }
@@ -75,6 +88,8 @@ function StreamView({
   setDraft: (update: (current: StreamDraft) => StreamDraft) => void;
   disabled: boolean;
 }) {
+  const t = useTranslations();
+  const locale = useLocale();
   return (
     <section
       aria-labelledby={`stream-${stream.id}`}
@@ -85,44 +100,50 @@ function StreamView({
           id={`stream-${stream.id}`}
           className="text-lg font-semibold [overflow-wrap:anywhere]"
         >
-          {stream.name || "Unnamed stream"}
+          {stream.name || t("unnamedStream")}
         </h3>
         <span
-          aria-label={`Routing: ${stream.schema}`}
+          aria-label={t("routing", {
+            schema: displaySchema(locale, stream.schema),
+          })}
           className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
         >
-          {stream.schema}
+          {displaySchema(locale, stream.schema)}
         </span>
         <span
-          aria-label={`Status: ${stream.state}`}
+          aria-label={t("status", {
+            state: displayState(locale, stream.state),
+          })}
           className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
         >
-          {stream.state}
+          {displayState(locale, stream.state)}
         </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Stream ID: {stream.id}
+        {t("streamId", { id: stream.id })}
       </p>
       {stream.schema === "redirect" ? (
         <dl className="mt-3 space-y-2 text-sm">
           <div className="flex gap-2">
-            <dt className="shrink-0 text-muted-foreground">Countries</dt>
+            <dt className="shrink-0 text-muted-foreground">{t("countries")}</dt>
             <dd className="[overflow-wrap:anywhere]">
-              {redirectCountries(stream)}
+              {redirectCountries(stream, locale)}
             </dd>
           </div>
           <div className="flex gap-2">
-            <dt className="shrink-0 text-muted-foreground">Destination</dt>
+            <dt className="shrink-0 text-muted-foreground">
+              {t("destination")}
+            </dt>
             <dd className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
               {typeof stream.action_payload === "string"
-                ? stream.action_payload || "Not provided"
-                : "Not provided"}
+                ? stream.action_payload || t("notProvided")
+                : t("notProvided")}
             </dd>
           </div>
         </dl>
       ) : (
         <>
-          <h4 className="mt-4 font-medium">Offers</h4>
+          <h4 className="mt-4 font-medium">{t("offers")}</h4>
           {draft ? (
             <fieldset disabled={disabled} className="min-w-0">
               <StreamOfferEditor
@@ -136,12 +157,14 @@ function StreamView({
           ) : stream.offers.length === 0 &&
             (!showRemoved || stream.removed_offers.length === 0) ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              No offers attached to this stream.
+              {t("noAttachedOffers")}
             </p>
           ) : (
             <ul
               className="mt-3 divide-y"
-              aria-label={`Offers in ${stream.name || `stream ${stream.id}`}`}
+              aria-label={t("offersIn", {
+                stream: stream.name || t("streamFallback", { id: stream.id }),
+              })}
             >
               {stream.offers.map((membership) => {
                 const offer = stream.offer_details.find(
@@ -154,17 +177,20 @@ function StreamView({
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium [overflow-wrap:anywhere]">
-                        {offer.name || "Unnamed offer"}
+                        {offer.name || t("unnamedOffer")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Offer ID: {offer.id} · Attached
+                        {t("offerId", { id: offer.id })} · {t("attached")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Membership: {membership.state} · Offer: {offer.state}
+                        {t("membershipOffer", {
+                          membership: displayState(locale, membership.state),
+                          state: displayState(locale, offer.state),
+                        })}
                       </p>
                     </div>
                     <p className="text-sm">
-                      Traffic share:{" "}
+                      {t("trafficShare")}:{" "}
                       <span className="font-semibold">{membership.share}%</span>
                     </p>
                   </li>
@@ -178,18 +204,20 @@ function StreamView({
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium [overflow-wrap:anywhere]">
-                        {offer.name || "Unnamed offer"}
+                        {offer.name || t("unnamedOffer")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Offer ID: {offer.id} · Removed
+                        {t("offerId", { id: offer.id })} · {t("removed")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Last known offer status: {offer.last_known_state}.
-                        Current availability has not been checked.
+                        {t("historicalOfferState", {
+                          state: displayState(locale, offer.last_known_state),
+                        })}{" "}
+                        {t("availabilityUnchecked")}
                       </p>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      No traffic allocated
+                      {t("noTraffic")}
                     </p>
                   </li>
                 ))}
@@ -202,6 +230,8 @@ function StreamView({
 }
 
 export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
+  const t = useTranslations();
+  const locale = useLocale();
   const validId = Number.isSafeInteger(campaignId) && campaignId > 0;
   const [attempt, setAttempt] = useState(0);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -283,8 +313,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                 sync: "unknown",
                 feedback: {
                   kind: "error",
-                  message:
-                    "The Push outcome is unknown. Check saved state before editing or retrying. Your draft has been kept.",
+                  message: "pushUnknown",
                 },
               },
         );
@@ -305,18 +334,14 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
           result.status === "checked"
             ? {
                 kind: remaining ? "error" : "success",
-                message: remaining
-                  ? "Saved state checked. Review the remaining changes before pushing again."
-                  : "Saved state checked. No pending changes remain.",
+                message: remaining ? "checkedRemaining" : "checkedNoPending",
               }
             : result.status === "applied"
-              ? { kind: "success", message: "Changes saved successfully." }
+              ? { kind: "success", message: "savedSuccessfully" }
               : {
                   kind: "error",
                   message:
-                    result.status === "partial"
-                      ? "Some changes were saved. Review the remaining changes before pushing again."
-                      : "Changes were not saved. Your draft has been kept for correction or retry.",
+                    result.status === "partial" ? "savedPartially" : "notSaved",
                 },
       });
     } catch (error) {
@@ -331,10 +356,10 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
               feedback: {
                 kind: "error",
                 message: rejected
-                  ? error.message
+                  ? error.key
                   : checkOnly
-                    ? "Could not check saved state. Your draft has been kept. Try checking again."
-                    : "Could not confirm the Push outcome. Check saved state before editing or retrying. Your draft has been kept.",
+                    ? "checkFailed"
+                    : "pushUnconfirmed",
               },
             },
       );
@@ -352,25 +377,24 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
           if (!confirmLeave()) event.preventDefault();
         }}
       >
-        <ArrowLeft aria-hidden="true" /> Back to campaigns
+        <ArrowLeft aria-hidden="true" /> {t("backCampaigns")}
       </Link>
       {!validId || state.status === "missing" ? (
         <div role="alert" className="mt-8">
-          <h1 className="text-3xl font-semibold">Campaign not found</h1>
+          <h1 className="text-3xl font-semibold">{t("campaignNotFound")}</h1>
           <p className="mt-3 text-muted-foreground">
-            This campaign is unavailable. Return to the campaign list to choose
-            another.
+            {t("campaignUnavailable")}
           </p>
         </div>
       ) : state.status === "loading" ? (
         <div role="status" className="py-16 text-center text-muted-foreground">
-          Loading campaign…
+          {t("loadingCampaign")}
         </div>
       ) : state.status === "error" ? (
         <div className="py-16 text-center">
           <div role="alert">
-            <h1 className="text-xl font-semibold">Couldn’t load campaign</h1>
-            <p className="mt-3 text-muted-foreground">Please try again.</p>
+            <h1 className="text-xl font-semibold">{t("campaignLoadFailed")}</h1>
+            <p className="mt-3 text-muted-foreground">{t("tryAgain")}</p>
           </div>
           <Button
             variant="outline"
@@ -380,7 +404,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
               setAttempt((value) => value + 1);
             }}
           >
-            <RotateCw aria-hidden="true" /> Retry
+            <RotateCw aria-hidden="true" /> {t("retry")}
           </Button>
         </div>
       ) : (
@@ -389,35 +413,38 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
             <div className="mt-8">
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <h1 className="text-3xl font-semibold tracking-tight [overflow-wrap:anywhere]">
-                  {state.campaign.name || "Unnamed campaign"}
+                  {state.campaign.name || t("unnamedCampaign")}
                 </h1>
                 {state.campaign.state && (
                   <span
-                    aria-label={`Status: ${state.campaign.state}`}
+                    aria-label={t("status", {
+                      state: displayState(locale, state.campaign.state),
+                    })}
                     className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
                   >
-                    {state.campaign.state}
+                    {displayState(locale, state.campaign.state)}
                   </span>
                 )}
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <p>Keitaro ID: {state.campaign.id}</p>
+                <p>{t("keitaroId", { id: state.campaign.id })}</p>
                 <p>
-                  Last updated: {state.campaign.updated_at || "Not provided"}
+                  {t("lastUpdated", {
+                    value: state.campaign.updated_at || t("notProvided"),
+                  })}
                 </p>
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                Preview offer changes, then Push to save them. Reloading or
-                leaving this page discards pending changes.
+                {t("detailsIntro")}
               </p>
             </div>
             {state.feedback && (
               <p
                 role={state.feedback.kind === "error" ? "alert" : "status"}
-                aria-label="Campaign synchronization"
+                aria-label={t("synchronization")}
                 className="mt-5 text-sm"
               >
-                {state.feedback.message}
+                {t(state.feedback.message)}
               </p>
             )}
             {state.sync === "unknown" && (
@@ -426,19 +453,19 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                 className="mt-3"
                 onClick={() => void synchronize(true)}
               >
-                Check saved state
+                {t("checkSaved")}
               </Button>
             )}
             {busy && (
               <p role="status" className="mt-5 text-sm">
                 {state.sync === "checking"
-                  ? "Checking saved state…"
-                  : "Saving changes…"}
+                  ? t("checkingSaved")
+                  : t("savingChanges")}
               </p>
             )}
             <section aria-labelledby="streams-title" className="mt-10">
               <h2 id="streams-title" className="text-2xl font-semibold">
-                Streams
+                {t("streams")}
               </h2>
               <label className="mt-4 flex w-fit cursor-pointer items-center gap-2 text-sm">
                 <input
@@ -447,12 +474,10 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                   onChange={(event) => setShowRemoved(event.target.checked)}
                   className="size-4 accent-emerald-700"
                 />
-                Show removed offers
+                {t("showRemoved")}
               </label>
               {state.campaign.streams.length === 0 ? (
-                <p className="mt-4 text-muted-foreground">
-                  No streams in this campaign.
-                </p>
+                <p className="mt-4 text-muted-foreground">{t("noStreams")}</p>
               ) : (
                 <div className="mt-5 space-y-5">
                   {state.campaign.streams.map((stream) => (

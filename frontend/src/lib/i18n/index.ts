@@ -33,3 +33,29 @@ export function translate(
     return String(params[name]);
   });
 }
+
+export function displayState(locale: Locale, state: string): string {
+  switch (state) {
+    case "active":
+      return translate(locale, "stateActive");
+    case "disabled":
+      return translate(locale, "stateDisabled");
+    case "archived":
+      return translate(locale, "stateArchived");
+    case "deleted":
+      return translate(locale, "stateDeleted");
+    default:
+      return state;
+  }
+}
+
+export function displaySchema(locale: Locale, schema: string): string {
+  switch (schema) {
+    case "redirect":
+      return translate(locale, "schemaRedirect");
+    case "landings":
+      return translate(locale, "schemaLandings");
+    default:
+      return schema;
+  }
+}

@@ -7,6 +7,7 @@ import {
   Plus,
   RotateCw,
 } from "lucide-react";
+import { useTranslations } from "@/components/locale-provider";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -20,6 +21,7 @@ type LoadState =
   | { status: "ready"; page: CampaignPage };
 
 export function CampaignList() {
+  const t = useTranslations();
   const [offset, setOffset] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -46,11 +48,11 @@ export function CampaignList() {
   return (
     <section aria-labelledby="campaigns-title">
       <h1 id="campaigns-title" className="sr-only">
-        Campaigns
+        {t("campaigns")}
       </h1>
       <div className="flex justify-end">
         <Link href="/campaigns/new" className={buttonVariants({ size: "lg" })}>
-          <Plus aria-hidden="true" /> Create campaign
+          <Plus aria-hidden="true" /> {t("createCampaign")}
         </Link>
       </div>
       <div
@@ -62,15 +64,15 @@ export function CampaignList() {
             role="status"
             className="px-6 py-16 text-center text-muted-foreground"
           >
-            Loading campaigns…
+            {t("loadingCampaigns")}
           </div>
         )}
         {state.status === "error" && (
           <div className="px-6 py-16 text-center">
             <div role="alert">
-              <h2 className="font-semibold">Couldn’t load campaigns</h2>
+              <h2 className="font-semibold">{t("campaignsLoadFailed")}</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Please try again.
+                {t("tryAgain")}
               </p>
             </div>
             <Button
@@ -81,7 +83,7 @@ export function CampaignList() {
                 setAttempt((value) => value + 1);
               }}
             >
-              <RotateCw aria-hidden="true" /> Retry
+              <RotateCw aria-hidden="true" /> {t("retry")}
             </Button>
           </div>
         )}
@@ -92,25 +94,23 @@ export function CampaignList() {
               className="mx-auto mb-4 size-8 text-muted-foreground"
             />
             <h2 className="font-semibold">
-              {offset === 0 ? "No campaigns yet" : "No campaigns on this page"}
+              {offset === 0 ? t("noCampaigns") : t("noCampaignsOnPage")}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {offset === 0
-                ? "Campaigns will appear here once they’re available in Keitaro."
-                : "The campaign list may have changed. Go back to the previous page."}
+              {offset === 0 ? t("campaignsAppear") : t("listChanged")}
             </p>
             {offset === 0 && (
               <Link
                 href="/campaigns/new"
                 className={buttonVariants({ className: "mt-5" })}
               >
-                <Plus aria-hidden="true" /> Create campaign
+                <Plus aria-hidden="true" /> {t("createCampaign")}
               </Link>
             )}
           </div>
         )}
         {state.status === "ready" && state.page.items.length > 0 && (
-          <ul aria-label="Campaigns" className="divide-y">
+          <ul aria-label={t("campaigns")} className="divide-y">
             {state.page.items.map((campaign) => (
               <li
                 key={campaign.id}
@@ -118,18 +118,21 @@ export function CampaignList() {
               >
                 <div className="min-w-0 flex-1">
                   <h2 className="font-medium [overflow-wrap:anywhere]">
-                    {campaign.name || "Unnamed campaign"}
+                    {campaign.name || t("unnamedCampaign")}
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Keitaro ID: {campaign.id}
+                    {t("keitaroId", { id: campaign.id })}
                   </p>
                 </div>
                 <Link
                   href={`/campaigns/${campaign.id}`}
                   className={buttonVariants({ variant: "outline" })}
-                  aria-label={`Open details for ${campaign.name || "Unnamed campaign"}`}
+                  aria-label={t("openDetails", {
+                    name: campaign.name || t("unnamedCampaign"),
+                  })}
                 >
-                  Details <ArrowRight aria-hidden="true" />
+                  {t("details")}
+                  <ArrowRight aria-hidden="true" />
                 </Link>
               </li>
             ))}
@@ -137,15 +140,18 @@ export function CampaignList() {
         )}
       </div>
       <nav
-        aria-label="Campaign pagination"
+        aria-label={t("pagination")}
         className="mt-5 flex flex-wrap items-center justify-between gap-4"
       >
         <p role="status" className="text-sm text-muted-foreground">
-          Page {offset / PAGE_SIZE + 1}
+          {t("page", { page: offset / PAGE_SIZE + 1 })}
           {state.status === "ready" && state.page.items.length > 0 && (
             <>
               {" "}
-              · Showing {offset + 1}–{offset + state.page.items.length}
+              {t("showingRange", {
+                first: offset + 1,
+                last: offset + state.page.items.length,
+              })}
             </>
           )}
         </p>
@@ -155,14 +161,15 @@ export function CampaignList() {
             disabled={loading || offset === 0}
             onClick={() => navigate(Math.max(0, offset - PAGE_SIZE))}
           >
-            <ArrowLeft aria-hidden="true" /> Previous
+            <ArrowLeft aria-hidden="true" /> {t("previous")}
           </Button>
           <Button
             variant="outline"
             disabled={state.status !== "ready" || !state.page.has_more}
             onClick={() => navigate(offset + PAGE_SIZE)}
           >
-            Next <ArrowRight aria-hidden="true" />
+            {t("next")}
+            <ArrowRight aria-hidden="true" />
           </Button>
         </div>
       </nav>

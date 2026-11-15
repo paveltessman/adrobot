@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { resolveLocale, translate } from "./i18n/index.ts";
+import {
+  displaySchema,
+  displayState,
+  resolveLocale,
+  translate,
+} from "./i18n/index.ts";
+import { LocalizedError, LocalizedRangeError } from "./i18n/errors.ts";
+import { creationError, type CreationDraft } from "./campaign-create.ts";
 import { en, ru } from "./i18n/messages.ts";
 
 test("accepts supported locales and defaults missing or invalid cookies to English", () => {
@@ -61,4 +68,52 @@ test("rejects missing or invalid counts instead of displaying broken messages", 
       TypeError,
     );
   }
+});
+
+test("interpolates complete sentences without treating user content as a template", () => {
+  assert.equal(
+    translate("ru", "openDetails", { name: "Summer {campaign} <test>" }),
+    "Открыть кампанию «Summer {campaign} <test>»",
+  );
+  assert.throws(() => translate("ru", "openDetails"), TypeError);
+});
+
+test("domain errors retain stable identifiers and English diagnostic text", () => {
+  const error = new LocalizedError("offerNoLongerAvailable");
+  assert.equal(error.key, "offerNoLongerAvailable");
+  assert.equal(error.message, "This offer is no longer available.");
+  assert.equal(translate("ru", error.key), "Этот оффер больше недоступен.");
+  const rangeError = new LocalizedRangeError("enterCampaignName");
+  assert.ok(rangeError instanceof RangeError);
+  assert.equal(translate("ru", rangeError.key), "Введите название кампании.");
+});
+
+test("creation validation returns identifiers that can be displayed in either language", () => {
+  const draft: CreationDraft = {
+    name: "",
+    countryCodes: "",
+    offer: null,
+    domainId: "",
+    groupId: "",
+    sourceId: "",
+  };
+  assert.equal(creationError(draft), "enterCampaignName");
+  assert.equal(
+    creationError({ ...draft, name: "Summer" }),
+    "enterCountryCodes",
+  );
+  assert.equal(
+    creationError({ ...draft, name: "Summer", countryCodes: "AU" }),
+    "selectAvailableOffer",
+  );
+});
+
+test("localizes known tracker values and preserves unknown values", () => {
+  assert.equal(displayState("en", "active"), "active");
+  assert.equal(displayState("ru", "active"), "активен");
+  assert.equal(displayState("ru", "disabled"), "отключён");
+  assert.equal(displayState("ru", "custom-state"), "custom-state");
+  assert.equal(displaySchema("ru", "redirect"), "переадресация");
+  assert.equal(displaySchema("ru", "landings"), "офферы");
+  assert.equal(displaySchema("ru", "custom-schema"), "custom-schema");
 });

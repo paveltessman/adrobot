@@ -1,3 +1,4 @@
+import { translate } from "./i18n/index.ts";
 import assert from "node:assert/strict";
 import { afterEach, mock, test } from "node:test";
 import {
@@ -86,24 +87,30 @@ test("serializes changed streams, attached offers, membership states, and pins o
 test("rejects empty or invalid distributions and unsupported membership states", () => {
   const initial = createStreamDraft(stream());
   const empty = removeOffer(initial, 9);
-  assert.match(draftPushError(empty)!, /at least one/);
+  assert.match(translate("en", draftPushError(empty)!), /at least one/);
   assert.throws(() => proposedChanges({ 1: empty }), RangeError);
   for (const share of [-1, 101, 33.5, NaN]) {
     const draft = { ...initial, offers: [{ ...initial.offers[0], share }] };
-    assert.match(draftPushError(draft)!, /whole numbers/);
+    assert.match(translate("en", draftPushError(draft)!), /whole numbers/);
   }
   assert.match(
-    draftPushError({
-      ...initial,
-      offers: [{ ...initial.offers[0], share: 90 }],
-    })!,
+    translate(
+      "en",
+      draftPushError({
+        ...initial,
+        offers: [{ ...initial.offers[0], share: 90 }],
+      })!,
+    ),
     /total 100/,
   );
   assert.match(
-    draftPushError({
-      ...initial,
-      offers: [{ ...initial.offers[0], membershipState: "deleted" }],
-    })!,
+    translate(
+      "en",
+      draftPushError({
+        ...initial,
+        offers: [{ ...initial.offers[0], membershipState: "deleted" }],
+      })!,
+    ),
     /unsupported/,
   );
 });
@@ -167,7 +174,10 @@ test("missing streams keep a blocked draft, while Cancel can discard it", () => 
   const previous = { 1: setPinned(createStreamDraft(stream()), 9, true) };
   const drafts = reconcileDrafts(campaign([]), previous, [1]);
   assert.equal(hasChanges(drafts[1]), true);
-  assert.match(draftPushError(drafts[1])!, /no longer available/);
+  assert.match(
+    translate("en", draftPushError(drafts[1])!),
+    /no longer available/,
+  );
   assert.deepEqual(confirmedDrafts(campaign([])), {});
 });
 
