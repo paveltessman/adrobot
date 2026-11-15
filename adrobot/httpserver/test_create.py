@@ -63,8 +63,8 @@ async def test_creation_result_envelope(settings: Settings, status: str) -> None
     app, create = creation_app(settings, result)
     async with http_client(app) as client:
         response = await client.post(_PATH, json=proposed().model_dump())
-        assert response.status == 200
-        assert await response.json() == {"data": result.model_dump(), "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": result.model_dump(), "error": None}
     create.assert_awaited_once_with(proposed())
 
 
@@ -85,8 +85,8 @@ async def test_creation_preflight_errors(
     app, _ = creation_app(settings, failure)
     async with http_client(app) as client:
         response = await client.post(_PATH, json=proposed().model_dump())
-        assert response.status == status
-        body = await response.json()
+        assert response.status_code == status
+        body = response.json()
         assert body["data"] is None
         assert body["error"]["code"] == code
         assert "private" not in str(body)
@@ -112,8 +112,8 @@ async def test_invalid_creation_never_calls_service(
     payload.update(update)
     async with http_client(app) as client:
         response = await client.post(_PATH, json=payload)
-        assert response.status == 422
-        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     create.assert_not_awaited()
 
 
@@ -181,8 +181,8 @@ async def test_creation_through_real_service_and_client(
         )
         async with http_client(create_app(configured)) as client:
             response = await client.post(_PATH, json=proposed().model_dump())
-            assert response.status == 200
-            body = await response.json()
+            assert response.status_code == 200
+            body = response.json()
             assert body["error"] is None
             assert body["data"]["status"] == (
                 "partial" if reject_offer_stream else "created"
@@ -193,8 +193,8 @@ async def test_creation_through_real_service_and_client(
             )
             assert "private" not in str(body)
             reloaded = await client.get(f"{_PATH}/7")
-            assert reloaded.status == 200
-            assert (await reloaded.json())["data"] == body["data"]["campaign"]
+            assert reloaded.status_code == 200
+            assert reloaded.json()["data"] == body["data"]["campaign"]
     assert tracker.writes == [
         "/admin_api/v1/campaigns",
         "/admin_api/v1/streams",
@@ -217,8 +217,8 @@ async def test_legacy_and_multiple_country_creation_without_resources(
         )
         async with http_client(create_app(configured)) as client:
             response = await client.post(_PATH, json=payload)
-            assert response.status == 200
-            body = await response.json()
+            assert response.status_code == 200
+            body = response.json()
             assert body["data"]["status"] == "created"
             assert body["data"]["campaign"]["domain_id"] is None
             assert body["data"]["campaign"]["group_id"] == 0
@@ -255,6 +255,6 @@ async def test_invalid_new_creation_fields_prevent_service_call(
     payload.update(update)
     async with http_client(app) as client:
         response = await client.post(_PATH, json=payload)
-        assert response.status == 422
-        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     create.assert_not_awaited()

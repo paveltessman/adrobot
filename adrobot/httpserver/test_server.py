@@ -9,6 +9,7 @@ from typing import Annotated
 from unittest.mock import patch
 
 import aiohttp
+import httpx
 import pytest
 import uvicorn
 from aiohttp import web
@@ -33,7 +34,7 @@ from adrobot.settings.settings import Settings
 
 
 @asynccontextmanager
-async def http_client(app: FastAPI) -> AsyncGenerator[aiohttp.ClientSession]:
+async def live_http_client(app: FastAPI) -> AsyncGenerator[aiohttp.ClientSession]:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         host, port = listener.getsockname()
@@ -64,12 +65,40 @@ async def http_client(app: FastAPI) -> AsyncGenerator[aiohttp.ClientSession]:
                     await asyncio.gather(task, return_exceptions=True)
 
 
+@asynccontextmanager
+async def http_client(app: FastAPI) -> AsyncGenerator[httpx.AsyncClient]:
+    # ASGITransport does not run lifespan itself. Keep startup and cleanup on
+    # the same event loop as requests and the aiohttp upstream client.
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://testserver",
+            timeout=5,
+        ) as client:
+            yield client
+
+
 @pytest.fixture
 def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("ADROBOT_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("ADROBOT_KEITARO_BASE_URL", "https://example.com/admin_api/v1/")
     monkeypatch.setenv("ADROBOT_KEITARO_API_KEY", "test-key")
     return Settings()
+
+
+async def test_live_server(settings: Settings) -> None:
+    app = create_app(settings)
+
+    @app.get("/test")
+    async def endpoint() -> SuccessResponse[int]:
+        return SuccessResponse(data=3)
+
+    async with live_http_client(app) as client:
+        response = await client.get("/test")
+        assert response.status == 200
+        assert await response.json() == {"data": 3, "error": None}
+    assert not hasattr(app.state, "keitaro_service")
+    assert not hasattr(app.state, "database")
 
 
 async def test_lifespan_builds_dependencies_and_closes_requester(
@@ -128,11 +157,11 @@ async def test_success_and_validation_envelopes(settings: Settings) -> None:
 
     async with http_client(app) as client:
         response = await client.get("/test", params={"count": "3"})
-        assert response.status == 200
-        assert (await response.json()) == {"data": 3, "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": 3, "error": None}
         response = await client.get("/test", params={"count": "secret-invalid"})
-        assert response.status == 422
-        assert (await response.json()) == {
+        assert response.status_code == 422
+        assert response.json() == {
             "data": None,
             "error": {
                 "code": "VALIDATION_ERROR",
@@ -172,8 +201,8 @@ async def test_failure_envelopes(
 
     async with http_client(app) as client:
         response = await client.get("/test")
-        assert response.status == status
-        assert (await response.json()) == {
+        assert response.status_code == status
+        assert response.json() == {
             "data": None,
             "error": {"code": code, "message": message},
         }
@@ -190,18 +219,18 @@ async def test_http_errors_and_headers(settings: Settings) -> None:
 
     async with http_client(app) as client:
         response = await client.get("/missing")
-        assert response.status == 404
-        assert (await response.json()) == {
+        assert response.status_code == 404
+        assert response.json() == {
             "data": None,
             "error": {"code": "NOT_FOUND", "message": "Not Found"},
         }
         response = await client.post("/test")
-        assert response.status == 405
-        assert (await response.json())["error"]["code"] == "METHOD_NOT_ALLOWED"
+        assert response.status_code == 405
+        assert response.json()["error"]["code"] == "METHOD_NOT_ALLOWED"
         assert response.headers["allow"] == "GET"
         response = await client.get("/test")
-        assert response.status == 401
-        assert (await response.json())["error"]["code"] == "UNAUTHORIZED"
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "UNAUTHORIZED"
         assert response.headers["www-authenticate"] == "Bearer"
 
 
@@ -212,7 +241,7 @@ _CAMPAIGNS_PATH = "/api/v1/integrations/keitaro/campaigns"
 async def campaigns_client(
     settings: Settings,
     handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
-) -> AsyncGenerator[aiohttp.ClientSession]:
+) -> AsyncGenerator[httpx.AsyncClient]:
     upstream = web.Application()
     upstream.router.add_get("/admin_api/v1/{path:.*}", handler)
     async with TestServer(upstream) as server:
@@ -260,8 +289,8 @@ async def test_campaigns_pagination(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_CAMPAIGNS_PATH, params=params)
-        assert response.status == 200
-        assert await response.json() == {
+        assert response.status_code == 200
+        assert response.json() == {
             "data": {
                 "items": campaigns[:limit],
                 "limit": limit,
@@ -297,8 +326,8 @@ async def test_campaigns_invalid_pagination(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_CAMPAIGNS_PATH, params=params)
-        assert response.status == 422
-        assert await response.json() == {
+        assert response.status_code == 422
+        assert response.json() == {
             "data": None,
             "error": {
                 "code": "VALIDATION_ERROR",
@@ -319,8 +348,8 @@ async def test_campaigns_upstream_failures(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_CAMPAIGNS_PATH)
-        assert response.status == 502
-        assert await response.json() == {
+        assert response.status_code == 502
+        assert response.json() == {
             "data": None,
             "error": {"code": "UPSTREAM_ERROR", "message": "Upstream request failed"},
         }
@@ -382,8 +411,8 @@ async def test_campaign_details(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_CAMPAIGNS_PATH}/7")
-        assert response.status == 200
-        assert await response.json() == {
+        assert response.status_code == 200
+        assert response.json() == {
             "data": {
                 **campaign,
                 "type": None,
@@ -447,13 +476,13 @@ async def test_campaign_details_exposes_removed_history(settings: Settings) -> N
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_CAMPAIGNS_PATH}/7")
-        assert response.status == 200
-        assert (await response.json())["data"]["streams"][0]["removed_offers"] == []
+        assert response.status_code == 200
+        assert response.json()["data"]["streams"][0]["removed_offers"] == []
         attached = False
         for _ in range(2):
             response = await client.get(f"{_CAMPAIGNS_PATH}/7")
-            assert response.status == 200
-            result = (await response.json())["data"]["streams"][0]
+            assert response.status_code == 200
+            result = response.json()["data"]["streams"][0]
             assert result["offers"] == []
             assert result["offer_details"] == []
             assert result["removed_offers"] == [
@@ -461,8 +490,8 @@ async def test_campaign_details_exposes_removed_history(settings: Settings) -> N
             ]
         attached = True
         response = await client.get(f"{_CAMPAIGNS_PATH}/7")
-        assert response.status == 200
-        result = (await response.json())["data"]["streams"][0]
+        assert response.status_code == 200
+        result = response.json()["data"]["streams"][0]
         assert result["removed_offers"] == []
         assert len(result["offers"]) == 1
 
@@ -476,8 +505,8 @@ async def test_campaign_details_invalid_id(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_CAMPAIGNS_PATH}/{campaign_id}")
-        assert response.status == 422
-        await response.read()
+        assert response.status_code == 422
+        await response.aread()
 
 
 @pytest.mark.parametrize(
@@ -525,8 +554,8 @@ async def test_campaign_details_failures_are_not_partial(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_CAMPAIGNS_PATH}/7")
-        assert response.status == expected
-        assert await response.json() == {
+        assert response.status_code == expected
+        assert response.json() == {
             "data": None,
             "error": {
                 "code": "NOT_FOUND" if expected == 404 else "UPSTREAM_ERROR",
@@ -572,8 +601,8 @@ async def test_offer_search(
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_OFFERS_PATH, params={"q": query})
-        assert response.status == 200
-        assert await response.json() == {
+        assert response.status_code == 200
+        assert response.json() == {
             "data": [offer for offer in offers if offer["id"] in expected_ids],
             "error": None,
         }
@@ -586,8 +615,8 @@ async def test_offer_search_empty_catalog(settings: Settings) -> None:
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_OFFERS_PATH)
-        assert response.status == 200
-        assert await response.json() == {"data": [], "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": [], "error": None}
 
 
 async def test_offer_lookup(settings: Settings) -> None:
@@ -601,8 +630,8 @@ async def test_offer_lookup(settings: Settings) -> None:
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_OFFERS_PATH}/9")
-        assert response.status == 200
-        assert await response.json() == {"data": offer, "error": None}
+        assert response.status_code == 200
+        assert response.json() == {"data": offer, "error": None}
 
 
 @pytest.mark.parametrize("identifier", ["0", "-1", "abc"])
@@ -612,8 +641,8 @@ async def test_offer_lookup_invalid_id(settings: Settings, identifier: str) -> N
 
     async with campaigns_client(settings, handler) as client:
         response = await client.get(f"{_OFFERS_PATH}/{identifier}")
-        assert response.status == 422
-        assert (await response.json())["error"]["code"] == "VALIDATION_ERROR"
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.parametrize("lookup", [False, True])
@@ -635,8 +664,8 @@ async def test_offer_failures(
     async with campaigns_client(settings, handler) as client:
         response = await client.get(_OFFERS_PATH + ("/9" if lookup else ""))
         missing = lookup and upstream_status == 404
-        assert response.status == (404 if missing else 502)
-        assert await response.json() == {
+        assert response.status_code == (404 if missing else 502)
+        assert response.json() == {
             "data": None,
             "error": {
                 "code": "NOT_FOUND" if missing else "UPSTREAM_ERROR",
