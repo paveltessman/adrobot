@@ -13,6 +13,7 @@ from .create_models import CampaignCreateRequest
 from .create_models import CreationResource
 from .exceptions import InvalidCampaignCreation
 from .exceptions import KeitaroApiError
+from .factory import create_keitaro_service
 from .models import CampaignConfiguration
 from .models import CampaignGroup
 from .models import Offer
@@ -77,7 +78,7 @@ async def case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[CreationCase]:
         streams.append(Stream.model_validate({"id": len(streams) + 1, **payload}))
 
     result = CreationCase(
-        service=KeitaroService(client, database, "instance"),
+        service=create_keitaro_service(client, database, "instance"),
         database=database,
         create=AsyncMock(side_effect=create),
         create_stream=AsyncMock(side_effect=create_stream),

@@ -13,33 +13,32 @@ from .models import Domain
 from .models import Offer
 from .models import TrafficSource
 from .push import CampaignPusher
+from .push import LoadCampaign
 from .push_models import CampaignPushRequest
 from .push_models import CampaignPushResult
-from .push_models import StreamChange
-from .reader import CampaignReader
-from .state import CampaignStateService
 from adrobot.services.network.http import HttpStatusError
-from adrobot.storage.database import Database
 
 
 class KeitaroService:
     def __init__(
-        self, api_client: KeitaroApiClient, database: Database, instance: str
+        self,
+        api_client: KeitaroApiClient,
+        load: LoadCampaign,
+        creator: CampaignCreator,
+        pusher: CampaignPusher,
     ) -> None:
         self._api_client = api_client
-        self._reader = CampaignReader(api_client)
-        self._state = CampaignStateService(
-            database.campaign_state_transaction, instance
-        )
+        self._load = load
+        self._creator = creator
+        self._pusher = pusher
         self._refresh_lock = Lock()
 
     async def create_campaign(
-        self, proposed: CampaignCreateRequest
+        self,
+        proposed: CampaignCreateRequest,
     ) -> CampaignCreateResult:
         async with self._refresh_lock:
-            return await CampaignCreator(
-                self._api_client, self._load_campaign_details
-            ).create(proposed)
+            return await self._creator.create(proposed)
 
     async def get_domains(self) -> list[Domain]:
         return await self._api_client.get_domains()
@@ -56,11 +55,12 @@ class KeitaroService:
     async def search_offers(self, query: str) -> list[Offer]:
         query = query.strip().casefold()
         offers = await self._api_client.get_offers()
-        return [
+        result = [
             offer
             for offer in offers
             if query in offer.name.casefold() or query == str(offer.id)
         ]
+        return result
 
     async def get_offer(self, offer_id: int) -> Offer:
         try:
@@ -73,25 +73,12 @@ class KeitaroService:
     async def get_campaign_details(self, campaign_id: int) -> CampaignDetails:
         # Keep overlapping refreshes from persisting snapshots out of order.
         async with self._refresh_lock:
-            return await self._load_campaign_details(campaign_id)
-
-    async def _load_campaign_details(self, campaign_id: int) -> CampaignDetails:
-        details = await self._reader.fetch(campaign_id)
-        await self._state.record(details, {})
-        return details
+            return await self._load(campaign_id)
 
     async def push_campaign(
-        self, campaign_id: int, proposed: CampaignPushRequest
+        self,
+        campaign_id: int,
+        proposed: CampaignPushRequest,
     ) -> CampaignPushResult:
         async with self._refresh_lock:
-            pusher = CampaignPusher(
-                self._api_client, self._load_campaign_details, self._reconcile_push
-            )
-            return await pusher.push(campaign_id, proposed)
-
-    async def _reconcile_push(
-        self, campaign_id: int, attempted: dict[int, StreamChange]
-    ) -> CampaignDetails:
-        details = await self._reader.fetch(campaign_id)
-        await self._state.reconcile(details, attempted)
-        return details
+            return await self._pusher.push(campaign_id, proposed)

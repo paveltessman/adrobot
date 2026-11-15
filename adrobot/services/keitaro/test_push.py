@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .api_client import KeitaroApiClient
 from .exceptions import InvalidCampaignPush
+from .factory import create_keitaro_service
 from .models import CampaignConfiguration
 from .models import Offer
 from .models import Stream
@@ -16,7 +17,6 @@ from .models import StreamOffer
 from .push_models import CampaignPushRequest
 from .push_models import ProposedOffer
 from .push_models import StreamChange
-from .service import KeitaroService
 from .test_service import history
 from .test_service import ServiceCase
 from .test_service import stream
@@ -35,7 +35,9 @@ async def push_case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[ServiceCa
     database = Database("sqlite+aiosqlite:///:memory:")
     await database.initialize()
     result = ServiceCase(
-        service=KeitaroService(client, database, "https://example.com/admin_api/v1/"),
+        service=create_keitaro_service(
+            client, database, "https://example.com/admin_api/v1/"
+        ),
         database=database,
         campaigns=AsyncMock(return_value=[]),
         configuration=AsyncMock(

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from adrobot.services.keitaro.api_client import create_keitaro_http_requester
 from adrobot.services.keitaro.api_client import KeitaroApiClient
-from adrobot.services.keitaro.service import KeitaroService
+from adrobot.services.keitaro.factory import create_keitaro_service
 from adrobot.settings.settings import Settings
 from adrobot.storage.database import Database
 
@@ -33,7 +33,7 @@ async def keitaro_lifespan(
     async with create_keitaro_http_requester(
         str(settings.ADROBOT_KEITARO_BASE_URL), settings.ADROBOT_KEITARO_API_KEY
     ) as requester:
-        app.state.keitaro_service = KeitaroService(
+        app.state.keitaro_service = create_keitaro_service(
             KeitaroApiClient(requester),
             database,
             str(settings.ADROBOT_KEITARO_BASE_URL),

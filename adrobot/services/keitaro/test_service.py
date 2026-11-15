@@ -8,6 +8,7 @@ import pytest
 from .api_client import KeitaroApiClient
 from .exceptions import CampaignNotFoundError
 from .exceptions import KeitaroApiError
+from .factory import create_keitaro_service
 from .models import Campaign
 from .models import CampaignConfiguration
 from .models import Offer
@@ -42,7 +43,9 @@ async def case(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[ServiceCase]:
     database = Database("sqlite+aiosqlite:///:memory:")
     await database.initialize()
     mocks = ServiceCase(
-        service=KeitaroService(client, database, "https://example.com/admin_api/v1/"),
+        service=create_keitaro_service(
+            client, database, "https://example.com/admin_api/v1/"
+        ),
         database=database,
         campaigns=AsyncMock(return_value=[]),
         configuration=AsyncMock(

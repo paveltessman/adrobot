@@ -104,7 +104,7 @@ async def test_startup_failure_closes_requester(settings: Settings) -> None:
         return_value=requester,
     ):
         with patch(
-            "adrobot.httpserver.startup.KeitaroService",
+            "adrobot.httpserver.startup.create_keitaro_service",
             side_effect=RuntimeError("setup"),
         ):
             with pytest.raises(RuntimeError, match="setup"):
