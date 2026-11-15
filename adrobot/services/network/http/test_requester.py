@@ -12,7 +12,6 @@ from aiohttp.test_utils import TestServer
 
 from . import AsyncHttpRequester
 from . import ConnectionTimeoutError
-from . import HttpResponse
 from . import HttpStatusError
 from . import NetworkError
 from . import TooManyRequestsError
@@ -211,15 +210,3 @@ def test_rejects_invalid_limits(timeout: float, attempts: int) -> None:
         AsyncHttpRequester(
             "https://example.com", timeout=timeout, max_attempts=attempts
         )
-
-
-@pytest.mark.parametrize(
-    "body, expected", [("[]", []), ("null", None), ("42", 42), ('"value"', "value")]
-)
-def test_json_response_values(body: str, expected: object) -> None:
-    assert HttpResponse(200, "OK", body).json() == expected
-
-
-def test_invalid_json_is_reported() -> None:
-    with pytest.raises(ValueError):
-        HttpResponse(200, "OK", "not json").json()

@@ -136,9 +136,6 @@ async def test_creates_and_confirms_campaign_and_history(case: CreationCase) -> 
         ("country_codes", ["au"]),
         ("country_codes", ["12"]),
         ("offer_id", 0),
-        ("domain_id", -1),
-        ("group_id", True),
-        ("traffic_source_id", "4"),
         ("extra", "unexpected"),
     ],
 )

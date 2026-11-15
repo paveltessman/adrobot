@@ -102,6 +102,12 @@ async def test_creation_preflight_errors(
         {"group_id": "3"},
         {"traffic_source_id": -1},
         {"streams": []},
+        {"country_codes": []},
+        {"country_codes": "AU"},
+        {"country_codes": ["AU", "USA"]},
+        {"country_codes": [None]},
+        {"country_code": "AU"},
+        {"domain_id": 0},
     ],
 )
 async def test_invalid_creation_never_calls_service(
@@ -234,27 +240,3 @@ async def test_legacy_and_multiple_country_creation_without_resources(
         path.endswith(("/domains/2", "/traffic_sources/4", "/groups"))
         for path in tracker.reads
     )
-
-
-@pytest.mark.parametrize(
-    "update",
-    [
-        {"country_codes": []},
-        {"country_codes": "AU"},
-        {"country_codes": ["AU", "USA"]},
-        {"country_codes": [None]},
-        {"country_code": "AU"},
-        {"domain_id": 0},
-    ],
-)
-async def test_invalid_new_creation_fields_prevent_service_call(
-    settings: Settings, update: dict[str, JsonValue]
-) -> None:
-    app, create = creation_app(settings, InvalidCampaignCreation("must not run"))
-    payload = proposed().model_dump()
-    payload.update(update)
-    async with http_client(app) as client:
-        response = await client.post(_PATH, json=payload)
-        assert response.status_code == 422
-        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-    create.assert_not_awaited()
