@@ -49,7 +49,7 @@ export function ThemeSelect() {
     <div
       role="group"
       aria-label={t("colorTheme")}
-      className="ml-auto flex shrink-0 gap-0.5 rounded-lg border bg-muted/50 p-1"
+      className="flex shrink-0 gap-0.5 rounded-lg border bg-muted/50 p-1"
     >
       {[
         { value: "system", label: t("systemTheme"), icon: Monitor },

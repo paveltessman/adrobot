@@ -1,16 +1,6 @@
-import type { Metadata } from "next";
 import { LocaleProvider } from "@/components/locale-provider";
-import { translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
-
-export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getLocale();
-  return {
-    title: translate(locale, "metadataTitle"),
-    description: translate(locale, "metadataDescription"),
-  };
-}
 
 export default async function RootLayout({
   children,
