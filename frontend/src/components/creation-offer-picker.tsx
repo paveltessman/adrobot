@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { availableOffer } from "@/lib/campaign-create";
-import { searchOffers, type Offer } from "@/lib/offers";
+import type { Offer } from "@/lib/offers";
+import { useOfferSearch } from "@/lib/use-offer-search";
 
 export function CreationOfferPicker({
   selected,
@@ -18,31 +19,7 @@ export function CreationOfferPicker({
   const t = useTranslations();
   const container = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [attempt, setAttempt] = useState(0);
-  const [search, setSearch] = useState<{
-    status: "idle" | "loading" | "ready" | "error";
-    offers: Offer[];
-  }>({ status: "idle", offers: [] });
-  const request = useRef<AbortController | null>(null);
-  useEffect(() => {
-    if ((!query.trim() && !attempt) || disabled) return;
-    const controller = new AbortController();
-    request.current = controller;
-    const timer = setTimeout(async () => {
-      try {
-        const offers = await searchOffers(query, controller.signal);
-        if (!controller.signal.aborted) setSearch({ status: "ready", offers });
-      } catch {
-        if (!controller.signal.aborted)
-          setSearch({ status: "error", offers: [] });
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query, attempt, disabled]);
+  const { query, search, changeQuery, searchNow } = useOfferSearch(disabled);
   useEffect(() => {
     function dismiss(event: PointerEvent) {
       if (!container.current?.contains(event.target as Node)) setOpen(false);
@@ -50,11 +27,9 @@ export function CreationOfferPicker({
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, []);
-  function searchNow() {
+  function submitSearch() {
     setOpen(true);
-    request.current?.abort();
-    setSearch({ status: "loading", offers: [] });
-    setAttempt((current) => current + 1);
+    searchNow();
   }
   return (
     <section
@@ -87,19 +62,13 @@ export function CreationOfferPicker({
             disabled={disabled}
             className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
             onChange={(event) => {
-              request.current?.abort();
               setOpen(true);
-              setQuery(event.target.value);
-              setSearch({
-                status:
-                  event.target.value.trim() || attempt ? "loading" : "idle",
-                offers: [],
-              });
+              changeQuery(event.target.value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                searchNow();
+                submitSearch();
               }
             }}
           />
@@ -109,7 +78,7 @@ export function CreationOfferPicker({
             disabled={disabled}
             aria-expanded={open && !disabled && search.status !== "idle"}
             aria-controls="offer-search-dropdown"
-            onClick={searchNow}
+            onClick={submitSearch}
           >
             {t("search")}
           </Button>
