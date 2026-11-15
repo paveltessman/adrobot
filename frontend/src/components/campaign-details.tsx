@@ -12,36 +12,13 @@ import Link from "next/link";
 import { useTranslations, useLocale } from "@/components/locale-provider";
 import { StreamOfferEditor } from "@/components/stream-offer-editor";
 import { CampaignDraftActions } from "@/components/campaign-draft-actions";
-import { hasChanges, type StreamDraft } from "@/lib/campaign-draft";
+import type { StreamDraft } from "@/lib/campaign-draft";
 import { useDraftNavigation } from "@/lib/use-draft-navigation";
 import { ArrowLeft, RotateCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import {
-  confirmedDrafts,
-  proposedChanges,
-  pushCampaign,
-  PushRejectedError,
-  reconcileDrafts,
-} from "@/lib/campaign-push";
+import { useState } from "react";
+import { useCampaignEditor } from "@/lib/use-campaign-editor";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  CampaignNotFoundError,
-  getCampaignDetails,
-  type CampaignDetails,
-  type CampaignStream,
-} from "@/lib/campaign-details";
-
-type LoadState =
-  | { status: "loading" }
-  | { status: "error" | "missing" }
-  | {
-      status: "ready";
-      campaign: CampaignDetails;
-      drafts: Record<number, StreamDraft>;
-      revision: number;
-      sync: "idle" | "pushing" | "checking" | "unknown";
-      feedback: { kind: "success" | "error"; message: MessageKey } | null;
-    };
+import type { CampaignStream } from "@/lib/campaign-details";
 
 function redirectCountries(stream: CampaignStream, locale: Locale): string {
   const t = (key: MessageKey, params?: Record<string, string | number>) =>
@@ -232,141 +209,19 @@ function StreamView({
 export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
   const t = useTranslations();
   const locale = useLocale();
-  const validId = Number.isSafeInteger(campaignId) && campaignId > 0;
-  const [attempt, setAttempt] = useState(0);
   const [showRemoved, setShowRemoved] = useState(false);
-  const [state, setState] = useState<LoadState>({ status: "loading" });
-  const operation = useRef(false);
-  const epoch = useRef(0);
-  const busy =
-    state.status === "ready" && ["pushing", "checking"].includes(state.sync);
-  const dirty =
-    state.status === "ready" && Object.values(state.drafts).some(hasChanges);
-  const confirmLeave = useDraftNavigation(
-    dirty || busy || (state.status === "ready" && state.sync === "unknown"),
-  );
-  useEffect(() => {
-    if (!validId) return;
-    const controller = new AbortController();
-    getCampaignDetails(campaignId, controller.signal).then(
-      (campaign) => {
-        if (!controller.signal.aborted)
-          setState({
-            status: "ready",
-            campaign,
-            revision: 0,
-            drafts: confirmedDrafts(campaign),
-            sync: "idle",
-            feedback: null,
-          });
-      },
-      (error) => {
-        if (!controller.signal.aborted)
-          setState({
-            status:
-              error instanceof CampaignNotFoundError ? "missing" : "error",
-          });
-      },
-    );
-    return () => {
-      controller.abort();
-      epoch.current += 1;
-      operation.current = false;
-    };
-  }, [campaignId, validId, attempt]);
-
-  async function synchronize(checkOnly = false) {
-    if (state.status !== "ready" || operation.current) return;
-    if (!checkOnly && state.sync === "unknown") return;
-    let changes;
-    try {
-      changes = proposedChanges(state.drafts);
-    } catch {
-      return;
-    }
-    if (!changes.length && !checkOnly) return;
-    const snapshot = state;
-    const started = epoch.current;
-    operation.current = true;
-    setState({
-      ...state,
-      revision: state.revision + 1,
-      sync: checkOnly ? "checking" : "pushing",
-      feedback: null,
-    });
-    try {
-      const result = checkOnly
-        ? {
-            status: "checked" as const,
-            campaign: await getCampaignDetails(campaignId),
-            pending_streams: changes,
-          }
-        : await pushCampaign(campaignId, changes);
-      const campaign = result.campaign;
-      if (started !== epoch.current) return;
-      if (!campaign) {
-        setState((current) =>
-          current.status !== "ready"
-            ? current
-            : {
-                ...current,
-                sync: "unknown",
-                feedback: {
-                  kind: "error",
-                  message: "pushUnknown",
-                },
-              },
-        );
-        return;
-      }
-      const pendingIds = result.pending_streams.map(
-        (change) => change.stream_id,
-      );
-      const drafts = reconcileDrafts(campaign, snapshot.drafts, pendingIds);
-      const remaining = Object.values(drafts).some(hasChanges);
-      setState({
-        status: "ready",
-        campaign,
-        drafts,
-        revision: snapshot.revision + 2,
-        sync: "idle",
-        feedback:
-          result.status === "checked"
-            ? {
-                kind: remaining ? "error" : "success",
-                message: remaining ? "checkedRemaining" : "checkedNoPending",
-              }
-            : result.status === "applied"
-              ? { kind: "success", message: "savedSuccessfully" }
-              : {
-                  kind: "error",
-                  message:
-                    result.status === "partial" ? "savedPartially" : "notSaved",
-                },
-      });
-    } catch (error) {
-      if (started !== epoch.current) return;
-      const rejected = !checkOnly && error instanceof PushRejectedError;
-      setState((current) =>
-        current.status !== "ready"
-          ? current
-          : {
-              ...current,
-              sync: rejected ? "idle" : "unknown",
-              feedback: {
-                kind: "error",
-                message: rejected
-                  ? error.key
-                  : checkOnly
-                    ? "checkFailed"
-                    : "pushUnconfirmed",
-              },
-            },
-      );
-    } finally {
-      if (started === epoch.current) operation.current = false;
-    }
-  }
+  const {
+    state,
+    validId,
+    busy,
+    shouldWarnLeave,
+    retry,
+    updateDraft,
+    cancel,
+    push,
+    checkSaved,
+  } = useCampaignEditor(campaignId);
+  const confirmLeave = useDraftNavigation(shouldWarnLeave);
 
   return (
     <>
@@ -396,14 +251,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
             <h1 className="text-xl font-semibold">{t("campaignLoadFailed")}</h1>
             <p className="mt-3 text-muted-foreground">{t("tryAgain")}</p>
           </div>
-          <Button
-            variant="outline"
-            className="mt-5"
-            onClick={() => {
-              setState({ status: "loading" });
-              setAttempt((value) => value + 1);
-            }}
-          >
+          <Button variant="outline" className="mt-5" onClick={retry}>
             <RotateCw aria-hidden="true" /> {t("retry")}
           </Button>
         </div>
@@ -451,7 +299,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
               <Button
                 variant="outline"
                 className="mt-3"
-                onClick={() => void synchronize(true)}
+                onClick={() => void checkSaved()}
               >
                 {t("checkSaved")}
               </Button>
@@ -488,25 +336,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                       draft={state.drafts[stream.id]}
                       revision={state.revision}
                       disabled={state.sync !== "idle"}
-                      setDraft={(update) =>
-                        setState((current) => {
-                          // Ignore lookups belonging to a draft canceled in the meantime.
-                          if (
-                            current.status !== "ready" ||
-                            current.revision !== state.revision ||
-                            current.sync !== "idle" ||
-                            !current.drafts[stream.id]
-                          )
-                            return current;
-                          return {
-                            ...current,
-                            drafts: {
-                              ...current.drafts,
-                              [stream.id]: update(current.drafts[stream.id]),
-                            },
-                          };
-                        })
-                      }
+                      setDraft={(update) => updateDraft(stream.id, update)}
                     />
                   ))}
                 </div>
@@ -515,19 +345,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                 drafts={state.drafts}
                 busy={busy}
                 unknown={state.sync === "unknown"}
-                onPush={() => void synchronize()}
-                onCancel={() =>
-                  setState((current) =>
-                    current.status !== "ready" || current.sync !== "idle"
-                      ? current
-                      : {
-                          ...current,
-                          revision: current.revision + 1,
-                          drafts: confirmedDrafts(current.campaign),
-                          feedback: null,
-                        },
-                  )
-                }
+                onPush={() => void push()}
+                onCancel={cancel}
               />
             </section>
           </>
