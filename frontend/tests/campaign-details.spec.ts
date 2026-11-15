@@ -79,12 +79,8 @@ test("navigates to grouped details and back without writing", async ({
     page.getByRole("heading", { name: campaign.name }),
   ).toBeVisible();
   await expect(page.getByText("Keitaro ID: 7", { exact: true })).toBeVisible();
-  await expect(page.getByText("Campaign notes", { exact: true })).toBeVisible();
   const google = page.getByRole("region", { name: "Google", exact: true });
   await expect(google.getByText("https://google.com")).toBeVisible();
-  await expect(
-    google.getByText("No offers attached to this stream."),
-  ).toBeVisible();
   const offers = page.getByRole("region", { name: "Offers", exact: true });
   await expect(offers.getByText("Summer offer", { exact: true })).toBeVisible();
   await expect(offers.getByText("Offer ID: 9 · Attached")).toBeVisible();
@@ -299,12 +295,12 @@ test("edits stay within their stream and preserve redirect configuration", async
   await offers.getByLabel("Search offers by name or ID").fill("offer");
   await offers.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
-    results.getByRole("button", { name: "Already attached" }),
+    results.getByRole("button", { name: /Already attached/ }),
   ).toBeDisabled();
   await results
     .getByRole("listitem")
     .filter({ hasText: "New offer" })
-    .getByRole("button", { name: "Add", exact: true })
+    .getByRole("button", { name: / · ID: 10/ })
     .click();
   await expect(
     members.getByText("Offer ID: 10 · Pending addition"),
@@ -316,10 +312,11 @@ test("edits stay within their stream and preserve redirect configuration", async
     .getByRole("listitem")
     .filter({ hasText: "Offer ID: 9 ·" });
   await original.getByRole("button", { name: "Pin", exact: true }).click();
+  await offers.getByLabel("Search offers by name or ID").click();
   await results
     .getByRole("listitem")
     .filter({ hasText: "Third offer" })
-    .getByRole("button", { name: "Add", exact: true })
+    .getByRole("button", { name: /Third offer · ID: 11/ })
     .click();
   await expect(
     original.getByText("Proposed traffic: 50% · Pinned"),
@@ -402,7 +399,7 @@ test("search loading, failure, empty results, and adding to an empty stream", as
   await search.click();
   await expect(empty.getByRole("status")).toHaveText("No matching offers.");
   await search.click();
-  await empty.getByRole("button", { name: "Add", exact: true }).click();
+  await empty.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
     empty.getByText("Offer ID: 10 · Pending addition"),
   ).toBeVisible();
@@ -498,12 +495,13 @@ test("availability failure preserves pins and permits retry", async ({
   const offers = page.getByRole("region", { name: "Offers", exact: true });
   await offers.getByRole("button", { name: "Pin", exact: true }).click();
   await offers.getByRole("button", { name: "Search", exact: true }).click();
-  await offers.getByRole("button", { name: "Add", exact: true }).click();
+  await offers.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(offers.getByRole("alert")).toHaveText(
     "Could not check offer availability. Please try again.",
   );
   await expect(offers.getByText("Traffic share: 100% · Pinned")).toBeVisible();
-  await offers.getByRole("button", { name: "Add", exact: true }).click();
+  await offers.getByLabel("Search offers by name or ID").click();
+  await offers.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
     offers.getByText("Offer ID: 10 · Pending addition"),
   ).toBeVisible();
@@ -565,10 +563,10 @@ test("previews allocation changes and cancels all streams without remote writes"
   await loadDraftPage(page);
   const offers = page.getByRole("region", { name: "Offers", exact: true });
   const empty = page.getByRole("region", { name: "Empty offers", exact: true });
-  const summary = page.getByRole("complementary", { name: "Pending changes" });
-  await expect(summary).toHaveCount(0);
+  const push = page.getByRole("button", { name: "Push", exact: true });
+  await expect(push).toHaveCount(0);
   await offers.getByRole("button", { name: "Search", exact: true }).click();
-  await offers.getByRole("button", { name: "Add", exact: true }).click();
+  await offers.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
     offers.getByText("Current traffic: 100%", { exact: true }),
   ).toBeVisible();
@@ -582,21 +580,19 @@ test("previews allocation changes and cancels all streams without remote writes"
     .getByRole("button", { name: "Pin", exact: true })
     .click();
   await empty.getByRole("button", { name: "Search", exact: true }).click();
-  await empty.getByRole("button", { name: "Add", exact: true }).click();
+  await empty.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
-    summary.getByRole("region", { name: "Changes in Offers", exact: true }),
-  ).toContainText("Traffic: 100% → 50% · Pin");
+    offers.getByText("Proposed traffic: 50% · Pinned"),
+  ).toBeVisible();
   await expect(
-    summary.getByRole("region", {
-      name: "Changes in Empty offers",
-      exact: true,
-    }),
-  ).toContainText("Add · Traffic: 0% → 100%");
+    empty.getByText("Offer ID: 10 · Pending addition"),
+  ).toBeVisible();
+  await expect(empty.getByText("Proposed traffic: 100%")).toBeVisible();
   await expect(
-    summary.getByRole("button", { name: "Push", exact: true }),
+    page.getByRole("button", { name: "Push", exact: true }),
   ).toBeEnabled();
-  await summary.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(summary).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(push).toHaveCount(0);
   await expect(
     offers.getByText("Traffic share: 100%", { exact: true }),
   ).toBeVisible();
@@ -624,15 +620,16 @@ test("pin-only edits warn on the Back link and allow staying or discarding", asy
   await loadDraftPage(page);
   const offers = page.getByRole("region", { name: "Offers", exact: true });
   await offers.getByRole("button", { name: "Pin", exact: true }).click();
-  const summary = page.getByRole("complementary", { name: "Pending changes" });
-  await expect(summary).toContainText("Traffic: 100% → 100% · Pin");
+  const push = page.getByRole("button", { name: "Push", exact: true });
+  await expect(offers.getByText("Traffic share: 100% · Pinned")).toBeVisible();
+  await expect(push).toBeEnabled();
   page.once("dialog", async (dialog) => {
     expect(dialog.type()).toBe("confirm");
     await dialog.dismiss();
   });
   await page.getByRole("link", { name: "Back to campaigns" }).click();
   await expect(page).toHaveURL(/\/campaigns\/7$/);
-  await expect(summary).toBeVisible();
+  await expect(push).toBeVisible();
   await expect(
     offers.getByRole("button", { name: "Unpin", exact: true }),
   ).toBeEnabled();
@@ -644,7 +641,7 @@ test("pin-only edits warn on the Back link and allow staying or discarding", asy
   await page
     .getByRole("link", { name: "Open details for Summer campaign" })
     .click();
-  await expect(summary).toHaveCount(0);
+  await expect(push).toHaveCount(0);
   await expect(
     offers.getByRole("button", { name: "Pin", exact: true }),
   ).toBeEnabled();
@@ -708,7 +705,7 @@ test("reload warns, can be canceled, and discards the draft when accepted", asyn
     offers.getByRole("button", { name: "Pin", exact: true }),
   ).toBeEnabled();
   await expect(
-    page.getByRole("complementary", { name: "Pending changes" }),
+    page.getByRole("button", { name: "Push", exact: true }),
   ).toHaveCount(0);
 });
 
@@ -741,9 +738,9 @@ test("Cancel aborts pending availability checks and clears invalid removals", as
     offers.getByText("Proposed traffic: 0%", { exact: true }),
   ).toBeVisible();
   await offers.getByRole("button", { name: "Search", exact: true }).click();
-  await offers.getByRole("button", { name: "Add", exact: true }).click();
+  await offers.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
-    offers.getByRole("button", { name: "Checking…" }),
+    offers.getByRole("button", { name: /Checking…/ }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   release();
@@ -753,11 +750,11 @@ test("Cancel aborts pending availability checks and clears invalid removals", as
   await expect(offers.getByRole("alert")).toHaveCount(0);
   await expect(offers.getByText("Late offer", { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole("complementary", { name: "Pending changes" }),
+    page.getByRole("button", { name: "Push", exact: true }),
   ).toHaveCount(0);
 });
 
-test("undoing pin changes removes the summary and navigation warning", async ({
+test("undoing pin changes removes the actions and navigation warning", async ({
   page,
 }) => {
   await loadDraftPage(page);
@@ -765,7 +762,7 @@ test("undoing pin changes removes the summary and navigation warning", async ({
   await offers.getByRole("button", { name: "Pin", exact: true }).click();
   await offers.getByRole("button", { name: "Unpin", exact: true }).click();
   await expect(
-    page.getByRole("complementary", { name: "Pending changes" }),
+    page.getByRole("button", { name: "Push", exact: true }),
   ).toHaveCount(0);
   page.on("dialog", () => {
     throw new Error("Unexpected warning for net-zero changes");

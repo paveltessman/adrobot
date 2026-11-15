@@ -114,15 +114,13 @@ async function setup(page: Page) {
 async function add(page: Page, name = "Offers") {
   const region = page.getByRole("region", { name, exact: true });
   await region.getByRole("button", { name: "Search", exact: true }).click();
-  await region.getByRole("button", { name: "Add", exact: true }).click();
+  await region.getByRole("button", { name: / · ID: 10/ }).click();
   await expect(
     region.getByText("Offer ID: 10 · Pending addition"),
   ).toBeVisible();
 }
-const summary = (page: Page) =>
-  page.getByRole("complementary", { name: "Pending changes" });
 const push = (page: Page) =>
-  summary(page).getByRole("button", { name: "Push", exact: true });
+  page.getByRole("button", { name: "Push", exact: true });
 
 test("Push saves a restoration and pins, reloads confirmed state, and removes navigation warnings", async ({
   page,
@@ -162,7 +160,7 @@ test("Push saves a restoration and pins, reloads confirmed state, and removes na
   await expect(page.getByRole("status")).toContainText(
     "Changes saved successfully.",
   );
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
   expect(posts).toEqual([
     [
       {
@@ -218,13 +216,13 @@ test("saving disables duplicate submission, editing, and Cancel", async ({
   await expect(
     page.getByText("Saving changes…", { exact: true }),
   ).toBeVisible();
-  const saving = summary(page).getByRole("button", {
+  const saving = page.getByRole("button", {
     name: "Saving…",
     exact: true,
   });
   await expect(saving).toBeDisabled();
   await expect(
-    summary(page).getByRole("button", { name: "Cancel", exact: true }),
+    page.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeDisabled();
   await expect(
     region.getByRole("button", { name: "Remove", exact: true }),
@@ -233,7 +231,7 @@ test("saving disables duplicate submission, editing, and Cancel", async ({
   await saving.dispatchEvent("click");
   expect(calls).toBe(1);
   release();
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
 });
 
 test("invalid removal disables Push and Cancel restores the confirmed state without POST", async ({
@@ -248,11 +246,9 @@ test("invalid removal disables Push and Cancel restores the confirmed state with
   const region = page.getByRole("region", { name: "Offers", exact: true });
   await region.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(push(page)).toBeDisabled();
-  await expect(summary(page)).toContainText("at least one offer");
-  await summary(page)
-    .getByRole("button", { name: "Cancel", exact: true })
-    .click();
-  await expect(summary(page)).toHaveCount(0);
+  await expect(region.getByRole("alert")).toContainText("at least one offer");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(push(page)).toHaveCount(0);
   await expect(
     region.getByText("Traffic share: 100%", { exact: true }),
   ).toBeVisible();
@@ -289,16 +285,9 @@ test("partial completion keeps only remaining changes and a retry sends only tha
     page.getByRole("alert", { name: "Campaign synchronization" }),
   ).toContainText("Some changes were saved");
   await expect(
-    summary(page).getByRole("region", {
-      name: "Changes in Offers",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await expect(
-    summary(page).getByRole("region", {
-      name: "Changes in Secondary",
-      exact: true,
-    }),
+    page
+      .getByRole("region", { name: "Secondary", exact: true })
+      .getByText("Offer ID: 10 · Pending addition"),
   ).toBeVisible();
   await expect(
     page
@@ -306,7 +295,7 @@ test("partial completion keeps only remaining changes and a retry sends only tha
       .getByText("Offer ID: 10 · Attached"),
   ).toBeVisible();
   await push(page).click();
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
   expect(
     posts.map((streams) => streams.map((stream) => stream.stream_id)),
   ).toEqual([[2, 3], [3]]);
@@ -348,10 +337,8 @@ for (const kind of ["failed", "rejected"] as const) {
     await expect(
       region.getByText("Offer ID: 10 · Pending addition"),
     ).toBeVisible();
-    await summary(page)
-      .getByRole("button", { name: "Cancel", exact: true })
-      .click();
-    await expect(summary(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(push(page)).toHaveCount(0);
     await expect(
       region.getByText("Traffic share: 100%", { exact: true }),
     ).toBeVisible();
@@ -402,7 +389,7 @@ for (const kind of ["unknown", "network", "malformed", "gateway"] as const) {
     ).toContainText("draft has been kept");
     await expect(push(page)).toBeDisabled();
     await expect(
-      summary(page).getByRole("button", { name: "Cancel", exact: true }),
+      page.getByRole("button", { name: "Cancel", exact: true }),
     ).toBeDisabled();
     const check = page.getByRole("button", {
       name: "Check saved state",
@@ -412,9 +399,9 @@ for (const kind of ["unknown", "network", "malformed", "gateway"] as const) {
     await expect(
       page.getByRole("alert", { name: "Campaign synchronization" }),
     ).toContainText("Could not check saved state");
-    await expect(summary(page)).toBeVisible();
+    await expect(push(page)).toBeVisible();
     await check.click();
-    await expect(summary(page)).toHaveCount(0);
+    await expect(push(page)).toHaveCount(0);
     await expect(page.getByRole("status")).toContainText(
       "No pending changes remain",
     );
@@ -459,13 +446,11 @@ test("unknown outcome recovery keeps uncommitted pins and Cancel uses refreshed 
   await page
     .getByRole("button", { name: "Check saved state", exact: true })
     .click();
-  await expect(summary(page)).toContainText("Traffic: 50% → 50% · Pin");
-  await expect(summary(page)).not.toContainText("Restore");
+  await expect(region.getByText("Traffic share: 50% · Pinned")).toBeVisible();
+  await expect(region.getByText("Offer ID: 10 · Attached")).toBeVisible();
   await expect(push(page)).toBeEnabled();
-  await summary(page)
-    .getByRole("button", { name: "Cancel", exact: true })
-    .click();
-  await expect(summary(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(push(page)).toHaveCount(0);
   await expect(region.getByText("Offer ID: 10 · Attached")).toBeVisible();
   await expect(
     region.getByText("Traffic share: 50%", { exact: true }),
@@ -513,22 +498,20 @@ test("a lookup started before Push cannot append an offer after the saved result
   const region = page.getByRole("region", { name: "Offers", exact: true });
   await region.getByRole("button", { name: "Pin", exact: true }).click();
   await region.getByRole("button", { name: "Search", exact: true }).click();
-  await region.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(
-    region.getByRole("button", { name: "Checking…", exact: true }),
-  ).toBeVisible();
+  await region.getByRole("button", { name: / · ID: 10/ }).click();
+  await expect(region.getByRole("button", { name: /Checking…/ })).toBeVisible();
   await push(page).click();
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
   release();
   await completed;
   await expect(region.getByText("Offer ID: 10 · Pending addition")).toHaveCount(
     0,
   );
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
   await expect(region.getByText("Traffic share: 100% · Pinned")).toBeVisible();
 });
 
-test("a disappeared stream retains a blocked summary that Cancel can discard", async ({
+test("a disappeared stream retains blocked actions that Cancel can discard", async ({
   page,
 }) => {
   await setup(page);
@@ -554,17 +537,18 @@ test("a disappeared stream retains a blocked summary that Cancel can discard", a
     .getByRole("button", { name: "Pin", exact: true })
     .click();
   await push(page).click();
-  await expect(summary(page)).toContainText(
-    "This stream is no longer available for offer editing",
-  );
+  await expect(
+    page
+      .getByRole("main")
+      .getByRole("alert")
+      .filter({ hasText: "Cannot push stream 2" }),
+  ).toContainText("This stream is no longer available for offer editing");
   await expect(push(page)).toBeDisabled();
   await expect(
     page.getByRole("region", { name: "Offers", exact: true }),
   ).toHaveCount(0);
-  await summary(page)
-    .getByRole("button", { name: "Cancel", exact: true })
-    .click();
-  await expect(summary(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(push(page)).toHaveCount(0);
 });
 
 test("successful removal disappears until Show removed is enabled", async ({
@@ -598,7 +582,7 @@ test("successful removal disappears until Show removed is enabled", async ({
     .click();
   await expect(region.getByText("Offer ID: 9 · Pending removal")).toBeVisible();
   await push(page).click();
-  await expect(summary(page)).toHaveCount(0);
+  await expect(push(page)).toHaveCount(0);
   await expect(region.getByText("Offer ID: 9 ·", { exact: false })).toHaveCount(
     0,
   );

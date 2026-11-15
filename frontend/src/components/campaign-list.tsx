@@ -45,19 +45,10 @@ export function CampaignList() {
 
   return (
     <section aria-labelledby="campaigns-title">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div>
-          <p className="mb-2 text-sm font-medium text-emerald-700">Keitaro</p>
-          <h1
-            id="campaigns-title"
-            className="text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Campaigns
-          </h1>
-          <p className="mt-3 text-muted-foreground">
-            Your existing advertising campaigns, in one place.
-          </p>
-        </div>
+      <h1 id="campaigns-title" className="sr-only">
+        Campaigns
+      </h1>
+      <div className="flex justify-end">
         <Link href="/campaigns/new" className={buttonVariants({ size: "lg" })}>
           <Plus aria-hidden="true" /> Create campaign
         </Link>
