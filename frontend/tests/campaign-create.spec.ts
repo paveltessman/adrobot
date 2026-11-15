@@ -53,7 +53,7 @@ async function fillRequired(page: Page) {
   await page.getByLabel("Search offers by name or ID").fill("Summer");
   await page
     .getByRole("list", { name: "Offer search results" })
-    .getByRole("button", { name: "Select", exact: true })
+    .getByRole("button", { name: /Summer offer/ })
     .first()
     .click();
 }
@@ -89,12 +89,18 @@ test("opens from the empty list and previews both streams without writing", asyn
   await expect(preview).toContainText("Offer ID: 9 · Traffic share: 100%");
   await expect(preview).toContainText("tracker.example (ID: 2)");
   await expect(push(page)).toBeEnabled();
+  const results = page.getByRole("list", { name: "Offer search results" });
+  await expect(results).toBeHidden();
+  await page.getByLabel("Search offers by name or ID").click();
+  await expect(results).toBeVisible();
   await expect(
     page
       .getByRole("listitem")
       .filter({ hasText: "Archived" })
       .getByRole("button"),
   ).toBeDisabled();
+  await page.getByLabel("Search offers by name or ID").press("Escape");
+  await expect(results).toBeHidden();
   expect(writes).toBe(0);
   expect(
     await page.evaluate(
@@ -225,7 +231,7 @@ test("selector failure can retry without losing inputs; empty options allow crea
   await page.getByLabel("Search offers by name or ID").fill("Summer");
   await page
     .getByRole("list", { name: "Offer search results" })
-    .getByRole("button", { name: "Select", exact: true })
+    .getByRole("button", { name: /Summer offer/ })
     .first()
     .click();
   await expect(push(page)).toBeEnabled();

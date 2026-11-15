@@ -3,7 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CreationOfferPicker } from "@/components/creation-offer-picker";
 import {
@@ -72,7 +72,9 @@ function Selector({
 function Preview({
   draft,
   selectors,
+  children,
 }: {
+  children: ReactNode;
   draft: CreationDraft;
   selectors?: CreationSelectors;
 }) {
@@ -135,8 +137,9 @@ function Preview({
         </li>
       </ol>
       <p className="mt-5 border-t pt-4 text-sm text-muted-foreground">
-        Nothing is created until you Push.
+        Push to save changes.
       </p>
+      {children}
     </section>
   );
 }
@@ -243,7 +246,6 @@ export function CampaignCreateForm() {
         <ArrowLeft aria-hidden="true" /> Back to campaigns
       </Link>
       <div className="mt-8">
-        <p className="text-sm font-medium text-emerald-700">Campaign creator</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           Create campaign
         </h1>
@@ -350,96 +352,99 @@ export function CampaignCreateForm() {
               />
             </div>
           </fieldset>
-          <Preview draft={draft} selectors={selectors} />
-        </div>
-        <div
-          className="sticky bottom-0 z-10 mt-6 rounded-xl border bg-background p-5 shadow-sm"
-          aria-label="Creation actions"
-          role="region"
-        >
-          {validation && !locked && (
-            <p className="mb-3 text-sm text-muted-foreground">{validation}</p>
-          )}
-          {submission.status === "idle" && submission.error && (
-            <p role="alert" className="mb-3 text-sm">
-              {submission.error}
-            </p>
-          )}
-          {busy && (
-            <p role="status" className="mb-3 text-sm">
-              Creating campaign…
-            </p>
-          )}
-          {submission.status === "created" && (
-            <p role="status" className="mb-3 text-sm">
-              Campaign created successfully. Opening its details…
-            </p>
-          )}
-          {blocked && (
-            <div className="mb-4 space-y-3 text-sm">
-              <p role="alert">
-                {submission.status === "partial"
-                  ? "The campaign exists, but its configuration is incomplete."
-                  : "The creation outcome is unknown."}{" "}
-                Your draft has been kept. Check Keitaro before submitting again;
-                another attempt can create a duplicate campaign.
-              </p>
-              {submission.campaignId && (
-                <p>
-                  Keitaro ID: {submission.campaignId} ·{" "}
-                  <Link
-                    className="font-medium underline"
-                    href={`/campaigns/${submission.campaignId}`}
-                    onNavigate={(event) => {
-                      if (!confirmLeave()) event.preventDefault();
-                    }}
-                  >
-                    Inspect campaign
-                  </Link>
+          <Preview draft={draft} selectors={selectors}>
+            <div
+              className="mt-5 border-t pt-5"
+              aria-label="Creation actions"
+              role="region"
+            >
+              {validation && !locked && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {validation}
                 </p>
               )}
-              <label className="flex items-start gap-2">
-                <input
-                  className="mt-1 accent-emerald-700"
-                  type="checkbox"
-                  checked={reviewed}
-                  onChange={(event) => setReviewed(event.target.checked)}
-                />
-                I checked Keitaro and want to make a new creation attempt.
-              </label>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!reviewed}
-                onClick={() => {
-                  if (reviewed) {
-                    setSubmission({
-                      status: "idle",
-                      error: "The next Push will create a new campaign.",
-                    });
-                    setReviewed(false);
-                  }
-                }}
-              >
-                Enable a new creation attempt
-              </Button>
+              {submission.status === "idle" && submission.error && (
+                <p role="alert" className="mb-3 text-sm">
+                  {submission.error}
+                </p>
+              )}
+              {busy && (
+                <p role="status" className="mb-3 text-sm">
+                  Creating campaign…
+                </p>
+              )}
+              {submission.status === "created" && (
+                <p role="status" className="mb-3 text-sm">
+                  Campaign created successfully. Opening its details…
+                </p>
+              )}
+              {blocked && (
+                <div className="mb-4 space-y-3 text-sm">
+                  <p role="alert">
+                    {submission.status === "partial"
+                      ? "The campaign exists, but its configuration is incomplete."
+                      : "The creation outcome is unknown."}{" "}
+                    Your draft has been kept. Check Keitaro before submitting
+                    again; another attempt can create a duplicate campaign.
+                  </p>
+                  {submission.campaignId && (
+                    <p>
+                      Keitaro ID: {submission.campaignId} ·{" "}
+                      <Link
+                        className="font-medium underline"
+                        href={`/campaigns/${submission.campaignId}`}
+                        onNavigate={(event) => {
+                          if (!confirmLeave()) event.preventDefault();
+                        }}
+                      >
+                        Inspect campaign
+                      </Link>
+                    </p>
+                  )}
+                  <label className="flex items-start gap-2">
+                    <input
+                      className="mt-1 accent-emerald-700"
+                      type="checkbox"
+                      checked={reviewed}
+                      onChange={(event) => setReviewed(event.target.checked)}
+                    />
+                    I checked Keitaro and want to make a new creation attempt.
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!reviewed}
+                    onClick={() => {
+                      if (reviewed) {
+                        setSubmission({
+                          status: "idle",
+                          error: "The next Push will create a new campaign.",
+                        });
+                        setReviewed(false);
+                      }
+                    }}
+                  >
+                    Enable a new creation attempt
+                  </Button>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-3">
+                <Button type="submit" disabled={locked || !!validation}>
+                  Push
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || submission.status === "created"}
+                  onClick={() => {
+                    if (confirmLeave()) router.push("/");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={locked || !!validation}>
-              Push
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || submission.status === "created"}
-              onClick={() => {
-                if (confirmLeave()) router.push("/");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+          </Preview>
         </div>
       </form>
     </>
