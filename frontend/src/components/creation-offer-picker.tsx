@@ -171,7 +171,7 @@ export function CreationOfferPicker({
         )}
       </div>
       {selected && (
-        <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm">
+        <div className="mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3 text-sm">
           <p className="font-medium [overflow-wrap:anywhere]">
             Selected offer: {selected.name || "Unnamed offer"}
           </p>

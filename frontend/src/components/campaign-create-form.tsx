@@ -89,7 +89,9 @@ function Preview({
       aria-labelledby="creation-preview"
       className="rounded-xl border bg-background p-6 lg:sticky lg:top-6"
     >
-      <p className="text-sm font-medium text-emerald-700">Preview</p>
+      <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+        Preview
+      </p>
       <h2
         id="creation-preview"
         className="mt-2 text-xl font-semibold [overflow-wrap:anywhere]"

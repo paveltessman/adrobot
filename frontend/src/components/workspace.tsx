@@ -1,11 +1,13 @@
 import { Bot } from "lucide-react";
 import Link from "next/link";
 
+import { ThemeSelect } from "@/components/theme-select";
+
 import type { ReactNode } from "react";
 
 export function Workspace({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-background">
       <a
         href="#main"
         className="sr-only rounded-md bg-background p-3 focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-10"
@@ -29,6 +31,7 @@ export function Workspace({ children }: { children: ReactNode }) {
               Campaigns
             </Link>
           </nav>
+          <ThemeSelect />
         </div>
       </header>
       <main id="main" className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
