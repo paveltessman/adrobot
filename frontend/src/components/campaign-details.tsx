@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { StreamOfferEditor } from "@/components/stream-offer-editor";
-import { CampaignDraftSummary } from "@/components/campaign-draft-summary";
+import { CampaignDraftActions } from "@/components/campaign-draft-actions";
 import { hasChanges, type StreamDraft } from "@/lib/campaign-draft";
 import { useDraftNavigation } from "@/lib/use-draft-navigation";
 import { ArrowLeft, RotateCw } from "lucide-react";
@@ -34,19 +34,30 @@ type LoadState =
       feedback: { kind: "success" | "error"; message: string } | null;
     };
 
-function Fields({ values }: { values: [string, string | number | null][] }) {
-  return (
-    <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {values.map(([label, value]) => (
-        <div key={label} className="min-w-0">
-          <dt className="text-sm text-muted-foreground">{label}</dt>
-          <dd className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {value === null || value === "" ? "Not provided" : value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
+function redirectCountries(stream: CampaignStream): string {
+  const filters = stream.filters.filter((filter) => filter.name === "country");
+  if (filters.length === 0) return "All countries";
+  const regions = new Intl.DisplayNames(["en"], { type: "region" });
+  return filters
+    .map((filter) => {
+      const codes = Array.isArray(filter.payload)
+        ? filter.payload.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : typeof filter.payload === "string"
+          ? [filter.payload]
+          : [];
+      const countries = codes
+        .map((code) => {
+          const normalized = code.toUpperCase();
+          return /^[A-Z]{2}$/.test(normalized)
+            ? `${regions.of(normalized) || normalized} (${normalized})`
+            : code;
+        })
+        .join(", ");
+      return `${filter.mode === "reject" ? "Except " : ""}${countries || "Not specified"}`;
+    })
+    .join("; ");
 }
 
 function StreamView({
@@ -67,117 +78,124 @@ function StreamView({
   return (
     <section
       aria-labelledby={`stream-${stream.id}`}
-      className="rounded-xl border bg-background p-6"
+      className="rounded-xl border bg-background p-4"
     >
-      <h3
-        id={`stream-${stream.id}`}
-        className="text-xl font-semibold [overflow-wrap:anywhere]"
-      >
-        {stream.name || "Unnamed stream"}
-      </h3>
-      <p className="mt-1 mb-5 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3
+          id={`stream-${stream.id}`}
+          className="text-lg font-semibold [overflow-wrap:anywhere]"
+        >
+          {stream.name || "Unnamed stream"}
+        </h3>
+        <span
+          aria-label={`Routing: ${stream.schema}`}
+          className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
+        >
+          {stream.schema}
+        </span>
+        <span
+          aria-label={`Status: ${stream.state}`}
+          className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
+        >
+          {stream.state}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
         Stream ID: {stream.id}
       </p>
-      <Fields
-        values={[
-          ["Routing", stream.schema],
-          ["Type", stream.type],
-          ["Status", stream.state],
-          ["Action", stream.action_type],
-        ]}
-      />
-      {stream.schema === "redirect" && (
-        <div className="mt-5">
-          <p className="text-sm text-muted-foreground">Destination</p>
-          <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {typeof stream.action_payload === "string"
-              ? stream.action_payload || "Not provided"
-              : JSON.stringify(stream.action_payload)}
-          </p>
-        </div>
-      )}
-      {stream.filters.length > 0 && (
-        <details className="mt-5">
-          <summary className="cursor-pointer text-sm font-medium">
-            Stream filters
-          </summary>
-          <pre className="mt-3 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
-            {JSON.stringify(stream.filters, null, 2)}
-          </pre>
-        </details>
-      )}
-      <h4 className="mt-7 font-medium">Offers</h4>
-      {draft ? (
-        <fieldset disabled={disabled} className="min-w-0">
-          <StreamOfferEditor
-            key={revision}
-            stream={stream}
-            showRemoved={showRemoved}
-            draft={draft}
-            setDraft={setDraft}
-          />
-        </fieldset>
-      ) : stream.offers.length === 0 &&
-        (!showRemoved || stream.removed_offers.length === 0) ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          No offers attached to this stream.
-        </p>
+      {stream.schema === "redirect" ? (
+        <dl className="mt-3 space-y-2 text-sm">
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-muted-foreground">Countries</dt>
+            <dd className="[overflow-wrap:anywhere]">
+              {redirectCountries(stream)}
+            </dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-muted-foreground">Destination</dt>
+            <dd className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+              {typeof stream.action_payload === "string"
+                ? stream.action_payload || "Not provided"
+                : "Not provided"}
+            </dd>
+          </div>
+        </dl>
       ) : (
-        <ul
-          className="mt-3 divide-y"
-          aria-label={`Offers in ${stream.name || `stream ${stream.id}`}`}
-        >
-          {stream.offers.map((membership) => {
-            const offer = stream.offer_details.find(
-              (item) => item.id === membership.offer_id,
-            )!;
-            return (
-              <li
-                key={membership.offer_id}
-                className="flex flex-wrap items-start justify-between gap-3 py-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium [overflow-wrap:anywhere]">
-                    {offer.name || "Unnamed offer"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Offer ID: {offer.id} · Attached
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Membership: {membership.state} · Offer: {offer.state}
-                  </p>
-                </div>
-                <p className="text-sm">
-                  Traffic share:{" "}
-                  <span className="font-semibold">{membership.share}%</span>
-                </p>
-              </li>
-            );
-          })}
-          {showRemoved &&
-            stream.removed_offers.map((offer) => (
-              <li
-                key={offer.id}
-                className="flex flex-wrap items-start justify-between gap-3 py-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium [overflow-wrap:anywhere]">
-                    {offer.name || "Unnamed offer"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Offer ID: {offer.id} · Removed
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Last known offer status: {offer.last_known_state}. Current
-                    availability has not been checked.
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  No traffic allocated
-                </p>
-              </li>
-            ))}
-        </ul>
+        <>
+          <h4 className="mt-4 font-medium">Offers</h4>
+          {draft ? (
+            <fieldset disabled={disabled} className="min-w-0">
+              <StreamOfferEditor
+                key={revision}
+                stream={stream}
+                showRemoved={showRemoved}
+                draft={draft}
+                setDraft={setDraft}
+              />
+            </fieldset>
+          ) : stream.offers.length === 0 &&
+            (!showRemoved || stream.removed_offers.length === 0) ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No offers attached to this stream.
+            </p>
+          ) : (
+            <ul
+              className="mt-3 divide-y"
+              aria-label={`Offers in ${stream.name || `stream ${stream.id}`}`}
+            >
+              {stream.offers.map((membership) => {
+                const offer = stream.offer_details.find(
+                  (item) => item.id === membership.offer_id,
+                )!;
+                return (
+                  <li
+                    key={membership.offer_id}
+                    className="flex flex-wrap items-start justify-between gap-3 py-4"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium [overflow-wrap:anywhere]">
+                        {offer.name || "Unnamed offer"}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Offer ID: {offer.id} · Attached
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Membership: {membership.state} · Offer: {offer.state}
+                      </p>
+                    </div>
+                    <p className="text-sm">
+                      Traffic share:{" "}
+                      <span className="font-semibold">{membership.share}%</span>
+                    </p>
+                  </li>
+                );
+              })}
+              {showRemoved &&
+                stream.removed_offers.map((offer) => (
+                  <li
+                    key={offer.id}
+                    className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-muted/50 px-3 py-4 text-muted-foreground"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium [overflow-wrap:anywhere]">
+                        {offer.name || "Unnamed offer"}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Offer ID: {offer.id} · Removed
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Last known offer status: {offer.last_known_state}.
+                        Current availability has not been checked.
+                      </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      No traffic allocated
+                    </p>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );
@@ -369,15 +387,25 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
         state.status === "ready" && (
           <>
             <div className="mt-8">
-              <p className="text-sm font-medium text-emerald-700">
-                Campaign details
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight [overflow-wrap:anywhere]">
-                {state.campaign.name || "Unnamed campaign"}
-              </h1>
-              <p className="mt-3 text-muted-foreground">
-                Keitaro ID: {state.campaign.id}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-semibold tracking-tight [overflow-wrap:anywhere]">
+                  {state.campaign.name || "Unnamed campaign"}
+                </h1>
+                {state.campaign.state && (
+                  <span
+                    aria-label={`Status: ${state.campaign.state}`}
+                    className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
+                  >
+                    {state.campaign.state}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <p>Keitaro ID: {state.campaign.id}</p>
+                <p>
+                  Last updated: {state.campaign.updated_at || "Not provided"}
+                </p>
+              </div>
               <p className="mt-3 text-sm text-muted-foreground">
                 Preview offer changes, then Push to save them. Reloading or
                 leaving this page discards pending changes.
@@ -408,28 +436,6 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                   : "Saving changes…"}
               </p>
             )}
-            <section
-              aria-labelledby="configuration-title"
-              className="mt-8 rounded-xl border bg-background p-6"
-            >
-              <h2
-                id="configuration-title"
-                className="mb-5 text-xl font-semibold"
-              >
-                Configuration
-              </h2>
-              <Fields
-                values={[
-                  ["Alias", state.campaign.alias],
-                  ["Status", state.campaign.state],
-                  ["Domain ID", state.campaign.domain_id],
-                  ["Group ID", state.campaign.group_id],
-                  ["Traffic source ID", state.campaign.traffic_source_id],
-                  ["Updated", state.campaign.updated_at],
-                  ["Notes", state.campaign.notes],
-                ]}
-              />
-            </section>
             <section aria-labelledby="streams-title" className="mt-10">
               <h2 id="streams-title" className="text-2xl font-semibold">
                 Streams
@@ -441,7 +447,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                   onChange={(event) => setShowRemoved(event.target.checked)}
                   className="size-4 accent-emerald-700"
                 />
-                Show removed
+                Show removed offers
               </label>
               {state.campaign.streams.length === 0 ? (
                 <p className="mt-4 text-muted-foreground">
@@ -480,26 +486,25 @@ export function CampaignDetailsView({ campaignId }: { campaignId: number }) {
                   ))}
                 </div>
               )}
+              <CampaignDraftActions
+                drafts={state.drafts}
+                busy={busy}
+                unknown={state.sync === "unknown"}
+                onPush={() => void synchronize()}
+                onCancel={() =>
+                  setState((current) =>
+                    current.status !== "ready" || current.sync !== "idle"
+                      ? current
+                      : {
+                          ...current,
+                          revision: current.revision + 1,
+                          drafts: confirmedDrafts(current.campaign),
+                          feedback: null,
+                        },
+                  )
+                }
+              />
             </section>
-            <CampaignDraftSummary
-              streams={state.campaign.streams}
-              drafts={state.drafts}
-              busy={busy}
-              unknown={state.sync === "unknown"}
-              onPush={() => void synchronize()}
-              onCancel={() =>
-                setState((current) =>
-                  current.status !== "ready" || current.sync !== "idle"
-                    ? current
-                    : {
-                        ...current,
-                        revision: current.revision + 1,
-                        drafts: confirmedDrafts(current.campaign),
-                        feedback: null,
-                      },
-                )
-              }
-            />
           </>
         )
       )}

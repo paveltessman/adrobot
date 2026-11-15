@@ -28,6 +28,8 @@ export function StreamOfferEditor({
   draft: StreamDraft;
   setDraft: (update: (current: StreamDraft) => StreamDraft) => void;
 }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<{
     status: "idle" | "loading" | "ready" | "error";
@@ -68,6 +70,14 @@ export function StreamOfferEditor({
     [],
   );
 
+  useEffect(() => {
+    function dismiss(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, []);
+
   async function stageOffer(id: number) {
     lookupRequest.current?.abort();
     const controller = new AbortController();
@@ -76,8 +86,11 @@ export function StreamOfferEditor({
     setMessages((current) => ({ ...current, [id]: "" }));
     try {
       const offer = await getOffer(id, controller.signal);
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         setDraft((current) => addOffer(current, offer));
+        container.current?.querySelector("input")?.focus();
+        setOpen(false);
+      }
     } catch (error) {
       if (!controller.signal.aborted) {
         setMessages((current) => ({
@@ -104,92 +117,126 @@ export function StreamOfferEditor({
 
   return (
     <>
-      <form
-        className="mt-4 flex flex-wrap items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setSearchAttempt((current) => current + 1);
+      <div
+        ref={container}
+        className="relative mt-4"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            container.current?.querySelector("input")?.focus();
+            setOpen(false);
+          }
         }}
       >
-        <label
-          className="min-w-0 flex-1 text-sm"
-          htmlFor={`offer-search-${stream.id}`}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            searchRequest.current?.abort();
+            setOpen(true);
+            setSearch({ status: "loading", offers: [] });
+            setSearchAttempt((current) => current + 1);
+          }}
         >
-          Search offers by name or ID
-          <input
-            id={`offer-search-${stream.id}`}
-            value={query}
-            onChange={(event) => {
-              searchRequest.current?.abort();
-              setQuery(event.target.value);
-              setSearchAttempt(0);
-              setSearch({ status: "idle", offers: [] });
-            }}
-            className="mt-1 block w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </label>
-        <Button type="submit" variant="outline">
-          Search
-        </Button>
-      </form>
-      {search.status === "loading" && (
-        <p role="status" className="mt-3 text-sm">
-          Searching offers…
-        </p>
-      )}
-      {search.status === "error" && (
-        <p role="alert" className="mt-3 text-sm">
-          Could not search offers. Please try again.
-        </p>
-      )}
-      {search.status === "ready" &&
-        (search.offers.length === 0 ? (
-          <p role="status" className="mt-3 text-sm">
-            No matching offers.
-          </p>
-        ) : (
-          <ul
-            aria-label="Offer search results"
-            className="mt-3 divide-y rounded-lg border px-3"
+          <label
+            className="min-w-0 flex-1 text-sm"
+            htmlFor={`offer-search-${stream.id}`}
           >
-            {search.offers.map((offer) => {
-              const attached = draft.offers.some(
-                (item) => item.id === offer.id && item.attached,
-              );
-              const blocked =
-                unavailable.has(offer.id) ||
-                ["deleted", "archived"].includes(offer.state);
-              return (
-                <li
-                  key={offer.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <span className="min-w-0 [overflow-wrap:anywhere]">
-                    {offer.name || "Unnamed offer"} · ID: {offer.id}
-                  </span>
-                  <Button
-                    variant="outline"
-                    disabled={attached || blocked || pending !== null}
-                    onClick={() => void stageOffer(offer.id)}
-                  >
-                    {attached
-                      ? "Already attached"
-                      : blocked
-                        ? "Unavailable"
-                        : pending === offer.id
-                          ? "Checking…"
-                          : "Add"}
-                  </Button>
-                  {messages[offer.id] && (
-                    <p role="alert" className="w-full text-sm">
-                      {messages[offer.id]}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ))}
+            Search offers by name or ID
+            <input
+              id={`offer-search-${stream.id}`}
+              value={query}
+              onFocus={() => setOpen(true)}
+              onClick={() => setOpen(true)}
+              onChange={(event) => {
+                searchRequest.current?.abort();
+                setOpen(true);
+                setQuery(event.target.value);
+                setSearchAttempt(0);
+                setSearch({
+                  status: event.target.value.trim() ? "loading" : "idle",
+                  offers: [],
+                });
+              }}
+              className="mt-1 block w-full rounded-lg border bg-background px-3 py-2"
+            />
+          </label>
+          <Button
+            type="submit"
+            variant="outline"
+            aria-expanded={open && search.status !== "idle"}
+            aria-controls={`offer-search-dropdown-${stream.id}`}
+          >
+            Search
+          </Button>
+        </form>
+        {open && search.status !== "idle" && (
+          <div
+            id={`offer-search-dropdown-${stream.id}`}
+            className="absolute inset-x-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-lg border bg-background p-3 shadow-lg"
+          >
+            {search.status === "loading" && (
+              <p role="status" className="mt-3 text-sm">
+                Searching offers…
+              </p>
+            )}
+            {search.status === "error" && (
+              <p role="alert" className="mt-3 text-sm">
+                Could not search offers. Please try again.
+              </p>
+            )}
+            {search.status === "ready" &&
+              (search.offers.length === 0 ? (
+                <p role="status" className="mt-3 text-sm">
+                  No matching offers.
+                </p>
+              ) : (
+                <ul aria-label="Offer search results" className="mt-3 divide-y">
+                  {search.offers.map((offer) => {
+                    const attached = draft.offers.some(
+                      (item) => item.id === offer.id && item.attached,
+                    );
+                    const blocked =
+                      unavailable.has(offer.id) ||
+                      ["deleted", "archived"].includes(offer.state);
+                    return (
+                      <li key={offer.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-3 text-left text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={attached || blocked || pending !== null}
+                          onClick={() => void stageOffer(offer.id)}
+                        >
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {offer.name || "Unnamed offer"} · ID: {offer.id}
+                          </span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {attached
+                              ? "Already attached"
+                              : blocked
+                                ? "Unavailable"
+                                : pending === offer.id
+                                  ? "Checking…"
+                                  : ""}
+                          </span>
+                        </button>
+                        {messages[offer.id] && (
+                          <p role="alert" className="w-full text-sm">
+                            {messages[offer.id]}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+          </div>
+        )}
+      </div>
       {draft.error && (
         <p role="alert" className="mt-4 text-sm text-destructive">
           {draft.error}
@@ -216,7 +263,7 @@ export function StreamOfferEditor({
             return (
               <li
                 key={offer.id}
-                className="flex flex-wrap items-start justify-between gap-3 py-4"
+                className={`flex flex-wrap items-start justify-between gap-3 py-4 ${!offer.attached ? "rounded-md bg-muted/50 px-3 text-muted-foreground" : ""}`}
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium [overflow-wrap:anywhere]">
