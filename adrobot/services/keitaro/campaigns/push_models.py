@@ -7,8 +7,8 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import model_validator
 
-from .models import CampaignDetails
-from .models import Stream
+from ..models import CampaignDetails
+from ..models import Stream
 
 
 class ProposedOffer(BaseModel):

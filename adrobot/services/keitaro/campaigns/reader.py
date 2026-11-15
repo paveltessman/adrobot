@@ -1,11 +1,11 @@
 # pyright: strict
-from .api_client import KeitaroApiClient
-from .exceptions import CampaignNotFoundError
-from .models import CampaignConfiguration
-from .models import CampaignDetails
-from .models import CampaignStream
-from .models import Offer
-from .models import Stream
+from ..api_client import KeitaroApiClient
+from ..exceptions import CampaignNotFoundError
+from ..models import CampaignConfiguration
+from ..models import CampaignDetails
+from ..models import CampaignStream
+from ..models import Offer
+from ..models import Stream
 from adrobot.services.network.http import HttpStatusError
 
 

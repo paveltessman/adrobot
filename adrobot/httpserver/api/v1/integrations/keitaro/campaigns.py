@@ -10,15 +10,15 @@ from pydantic import BaseModel
 
 from adrobot.httpserver.dependencies import get_keitaro_service
 from adrobot.httpserver.schemas import SuccessResponse
-from adrobot.services.keitaro.create_models import CampaignCreateRequest
-from adrobot.services.keitaro.create_models import CampaignCreateResult
+from adrobot.services.keitaro.campaigns.create_models import CampaignCreateRequest
+from adrobot.services.keitaro.campaigns.create_models import CampaignCreateResult
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushRequest
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushResult
 from adrobot.services.keitaro.exceptions import CampaignNotFoundError
 from adrobot.services.keitaro.exceptions import InvalidCampaignCreation
 from adrobot.services.keitaro.exceptions import InvalidCampaignPush
 from adrobot.services.keitaro.models import Campaign
 from adrobot.services.keitaro.models import CampaignDetails
-from adrobot.services.keitaro.push_models import CampaignPushRequest
-from adrobot.services.keitaro.push_models import CampaignPushResult
 from adrobot.services.keitaro.service import KeitaroService
 
 router = APIRouter(tags=["Keitaro"])

@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from .api_client import KeitaroApiClient
-from .create import CampaignCreator
-from .create_models import CampaignCreateRequest
-from .create_models import CampaignCreateResult
+from .campaigns.create import CampaignCreator
+from .campaigns.create_models import CampaignCreateRequest
+from .campaigns.create_models import CampaignCreateResult
+from .campaigns.push import CampaignPusher
+from .campaigns.push_models import CampaignPushRequest
+from .campaigns.push_models import CampaignPushResult
+from .campaigns.push_models import ProposedOffer
+from .campaigns.push_models import StreamChange
 from .models import CampaignDetails
-from .push import CampaignPusher
-from .push_models import CampaignPushRequest
-from .push_models import CampaignPushResult
-from .push_models import ProposedOffer
-from .push_models import StreamChange
 from .service import KeitaroService
 
 

@@ -4,11 +4,11 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from .models import CampaignDetails
-from .models import CampaignStream
-from .models import Offer
-from .models import RemovedOffer
-from .models import StreamOffer
+from ..models import CampaignDetails
+from ..models import CampaignStream
+from ..models import Offer
+from ..models import RemovedOffer
+from ..models import StreamOffer
 from .state import CampaignStateService
 from .state import CampaignStateTransaction
 from adrobot.storage.campaign_state import CampaignStateRepository

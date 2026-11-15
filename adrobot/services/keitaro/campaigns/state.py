@@ -3,8 +3,8 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import replace
 
-from .models import CampaignDetails
-from .models import RemovedOffer
+from ..models import CampaignDetails
+from ..models import RemovedOffer
 from .push_models import StreamChange
 from adrobot.storage.campaign_state import CampaignStateRepository
 from adrobot.storage.campaign_state import Membership

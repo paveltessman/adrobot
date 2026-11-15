@@ -13,12 +13,12 @@ from pydantic import TypeAdapter
 from .dependencies import get_keitaro_service
 from .server import create_app
 from .test_server import http_client
-from adrobot.services.keitaro.create_models import CampaignCreateResult
+from adrobot.services.keitaro.campaigns.create_models import CampaignCreateResult
+from adrobot.services.keitaro.campaigns.test_create import proposed
 from adrobot.services.keitaro.exceptions import InvalidCampaignCreation
 from adrobot.services.keitaro.models import CampaignDetails
 from adrobot.services.keitaro.service import KeitaroService
 from adrobot.services.keitaro.test_api_client import api_server
-from adrobot.services.keitaro.test_create import proposed
 from adrobot.services.network.http import NetworkError
 from adrobot.settings.settings import Settings
 

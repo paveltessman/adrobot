@@ -8,13 +8,13 @@ from pydantic import JsonValue
 from .dependencies import get_keitaro_service
 from .server import create_app
 from .test_server import http_client
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushRequest
+from adrobot.services.keitaro.campaigns.push_models import CampaignPushResult
+from adrobot.services.keitaro.campaigns.test_push import change
 from adrobot.services.keitaro.exceptions import CampaignNotFoundError
 from adrobot.services.keitaro.exceptions import InvalidCampaignPush
 from adrobot.services.keitaro.models import CampaignDetails
-from adrobot.services.keitaro.push_models import CampaignPushRequest
-from adrobot.services.keitaro.push_models import CampaignPushResult
 from adrobot.services.keitaro.service import KeitaroService
-from adrobot.services.keitaro.test_push import change
 from adrobot.settings.settings import Settings
 
 _PATH = "/api/v1/integrations/keitaro/campaigns/7/push"

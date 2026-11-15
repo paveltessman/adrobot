@@ -4,10 +4,10 @@ from aiohttp import web
 
 from .api_client import create_keitaro_http_requester
 from .api_client import KeitaroApiClient
-from .create import stream_payloads
+from .campaigns.create import stream_payloads
+from .campaigns.test_create import proposed
 from .exceptions import KeitaroApiError
 from .test_api_client import api_server
-from .test_create import proposed
 from adrobot.services.network.http import AsyncHttpRequester
 from adrobot.services.network.http import HttpStatusError
 
@@ -157,7 +157,7 @@ async def test_creation_resource_validation(resource: str, body: str) -> None:
 async def test_creation_omits_unselected_resources(
     domain: bool, group: bool, source: bool
 ) -> None:
-    from .create_models import CampaignCreateRequest
+    from .campaigns.create_models import CampaignCreateRequest
 
     selected = {
         "domain_id": 2 if domain else None,
