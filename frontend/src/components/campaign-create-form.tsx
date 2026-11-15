@@ -1,13 +1,16 @@
 "use client";
 
-import type { MessageKey } from "@/lib/i18n";
-
 import { ArrowLeft } from "lucide-react";
 import { useTranslations } from "@/components/locale-provider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { CampaignCreationPreview } from "@/components/campaign-creation-preview";
+import {
+  CampaignCreationActions,
+  type CreationSubmission,
+} from "@/components/campaign-creation-actions";
 import { CreationOfferPicker } from "@/components/creation-offer-picker";
 import {
   createCampaign,
@@ -15,7 +18,6 @@ import {
   CreationRejectedError,
   CreationUnknownError,
   getCreationSelectors,
-  parseCountryCodes,
   type CreationDraft,
   type CreationOption,
   type CreationSelectors,
@@ -35,11 +37,6 @@ const inputClass =
 type OptionsState =
   | { status: "loading" | "error" }
   | { status: "ready"; values: CreationSelectors };
-type Submission =
-  | { status: "idle"; error?: MessageKey }
-  | { status: "submitting" }
-  | { status: "created"; campaignId: number }
-  | { status: "partial" | "unknown"; campaignId: number | null };
 
 function Selector({
   id,
@@ -75,94 +72,15 @@ function Selector({
   );
 }
 
-function Preview({
-  draft,
-  selectors,
-  children,
-}: {
-  children: ReactNode;
-  draft: CreationDraft;
-  selectors?: CreationSelectors;
-}) {
-  const t = useTranslations();
-  function option(options: CreationOption[] | undefined, value: string) {
-    const selected = options?.find((item) => String(item.id) === value);
-    return selected
-      ? `${selected.name || t("unnamed")} (ID: ${selected.id})`
-      : t("none");
-  }
-  return (
-    <section
-      aria-labelledby="creation-preview"
-      className="rounded-xl border bg-background p-6 lg:sticky lg:top-6"
-    >
-      <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-        {t("preview")}
-      </p>
-      <h2
-        id="creation-preview"
-        className="mt-2 text-xl font-semibold [overflow-wrap:anywhere]"
-      >
-        {draft.name.trim() || t("newCampaign")}
-      </h2>
-      <dl className="mt-5 space-y-3 text-sm">
-        {[
-          [t("domain"), option(selectors?.domains, draft.domainId)],
-          [t("campaignGroup"), option(selectors?.groups, draft.groupId)],
-          [t("trafficSource"), option(selectors?.sources, draft.sourceId)],
-        ].map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="mt-1 [overflow-wrap:anywhere]">{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <ol
-        className="mt-6 space-y-4 border-t pt-5 text-sm"
-        aria-label={t("plannedStreams")}
-      >
-        <li>
-          <h3 className="font-semibold">{t("countryRedirect")}</h3>
-          <p className="mt-2">
-            {t("trafficCountries", {
-              countries:
-                parseCountryCodes(draft.countryCodes).join(", ") ||
-                t("selectedCountries"),
-            })}
-          </p>
-          <p className="mt-1 break-all text-muted-foreground">
-            https://www.google.com
-          </p>
-        </li>
-        <li>
-          <h3 className="font-semibold">{t("offersStream")}</h3>
-          <p className="mt-2">
-            {t("remainingTraffic", {
-              offer: draft.offer?.name || t("selectedOfferPlaceholder"),
-            })}
-          </p>
-          <p className="mt-1 text-muted-foreground">
-            {draft.offer
-              ? t("initialOfferShare", { id: draft.offer.id })
-              : t("selectOfferTraffic")}
-          </p>
-        </li>
-      </ol>
-      <p className="mt-5 border-t pt-4 text-sm text-muted-foreground">
-        {t("pushToSave")}
-      </p>
-      {children}
-    </section>
-  );
-}
-
 export function CampaignCreateForm() {
   const t = useTranslations();
   const router = useRouter();
   const [draft, setDraft] = useState<CreationDraft>(emptyDraft);
   const [options, setOptions] = useState<OptionsState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [submission, setSubmission] = useState<Submission>({ status: "idle" });
+  const [submission, setSubmission] = useState<CreationSubmission>({
+    status: "idle",
+  });
   const [reviewed, setReviewed] = useState(false);
   const operation = useRef(false);
   const mounted = useRef(false);
@@ -363,98 +281,24 @@ export function CampaignCreateForm() {
               />
             </div>
           </fieldset>
-          <Preview draft={draft} selectors={selectors}>
-            <div
-              className="mt-5 border-t pt-5"
-              aria-label={t("creationActions")}
-              role="region"
-            >
-              {validation && !locked && (
-                <p className="mb-3 text-sm text-muted-foreground">
-                  {t(validation)}
-                </p>
-              )}
-              {submission.status === "idle" && submission.error && (
-                <p role="alert" className="mb-3 text-sm">
-                  {t(submission.error)}
-                </p>
-              )}
-              {busy && (
-                <p role="status" className="mb-3 text-sm">
-                  {t("creatingCampaign")}
-                </p>
-              )}
-              {submission.status === "created" && (
-                <p role="status" className="mb-3 text-sm">
-                  {t("campaignCreated")}
-                </p>
-              )}
-              {blocked && (
-                <div className="mb-4 space-y-3 text-sm">
-                  <p role="alert">
-                    {submission.status === "partial"
-                      ? t("creationIncomplete")
-                      : t("creationUnknown")}{" "}
-                    {t("creationKept")}
-                  </p>
-                  {submission.campaignId && (
-                    <p>
-                      {t("keitaroId", { id: submission.campaignId })} ·{" "}
-                      <Link
-                        className="font-medium underline"
-                        href={`/campaigns/${submission.campaignId}`}
-                        onNavigate={(event) => {
-                          if (!confirmLeave()) event.preventDefault();
-                        }}
-                      >
-                        {t("inspectCampaign")}
-                      </Link>
-                    </p>
-                  )}
-                  <label className="flex items-start gap-2">
-                    <input
-                      className="mt-1 accent-emerald-700"
-                      type="checkbox"
-                      checked={reviewed}
-                      onChange={(event) => setReviewed(event.target.checked)}
-                    />
-                    {t("creationReviewed")}
-                  </label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!reviewed}
-                    onClick={() => {
-                      if (reviewed) {
-                        setSubmission({
-                          status: "idle",
-                          error: "nextPushCreates",
-                        });
-                        setReviewed(false);
-                      }
-                    }}
-                  >
-                    {t("enableCreation")}
-                  </Button>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={locked || !!validation}>
-                  {t("push")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || submission.status === "created"}
-                  onClick={() => {
-                    if (confirmLeave()) router.push("/");
-                  }}
-                >
-                  {t("cancel")}
-                </Button>
-              </div>
-            </div>
-          </Preview>
+          <CampaignCreationPreview draft={draft} selectors={selectors}>
+            <CampaignCreationActions
+              submission={submission}
+              validation={validation}
+              reviewed={reviewed}
+              onReviewedChange={setReviewed}
+              onEnableCreation={() => {
+                if (reviewed) {
+                  setSubmission({ status: "idle", error: "nextPushCreates" });
+                  setReviewed(false);
+                }
+              }}
+              onBeforeNavigate={confirmLeave}
+              onCancel={() => {
+                if (confirmLeave()) router.push("/");
+              }}
+            />
+          </CampaignCreationPreview>
         </div>
       </form>
     </>
